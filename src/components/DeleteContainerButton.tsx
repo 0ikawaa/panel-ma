@@ -29,7 +29,7 @@ export default function DeleteContainerButton({
     <>
       <button
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+        className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-400 transition hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-400"
         aria-label="Eliminar contenedor"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -40,21 +40,21 @@ export default function DeleteContainerButton({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => !loading && setOpen(false)}
           />
-          <div className="animate-in relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
+          <div className="animate-in card relative w-full max-w-sm border-white/10 p-6 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-500/15 text-red-400">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                 <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
               </svg>
             </div>
-            <h2 className="text-lg font-bold text-slate-900">
+            <h2 className="text-lg font-bold text-white">
               Eliminar contenedor
             </h2>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-zinc-400">
               ¿Seguro que querés eliminar{" "}
-              <span className="font-semibold text-slate-700">
+              <span className="font-semibold text-zinc-200">
                 {containerName}
               </span>
               ? Se borrarán todos sus productos y fotos. Esta acción no se puede
@@ -64,14 +64,14 @@ export default function DeleteContainerButton({
               <button
                 onClick={() => setOpen(false)}
                 disabled={loading}
-                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-100"
+                className="rounded-xl px-4 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-white/5"
               >
                 Cancelar
               </button>
               <button
                 onClick={onDelete}
                 disabled={loading}
-                className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:bg-red-700 disabled:opacity-60"
+                className="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-red-500 disabled:opacity-60"
               >
                 {loading ? "Eliminando…" : "Eliminar"}
               </button>

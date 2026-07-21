@@ -36,27 +36,25 @@ export default function LoginPage() {
 
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-4">
-      {/* Fondo decorativo */}
-      <div className="brand-gradient absolute inset-0 -z-10" />
-      <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.25),transparent_45%),radial-gradient(circle_at_80%_80%,rgba(255,255,255,0.18),transparent_40%)]" />
+      {/* Orbes de color animados */}
+      <div className="animate-float absolute -left-32 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-indigo-600/25 blur-[120px]" />
+      <div className="animate-float absolute -right-24 bottom-0 -z-10 h-[26rem] w-[26rem] rounded-full bg-fuchsia-600/20 blur-[120px] [animation-delay:-7s]" />
 
       <div className="animate-in w-full max-w-md">
-        <div className="rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl backdrop-blur-xl sm:p-10">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-2xl sm:p-10">
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="brand-gradient mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white shadow-lg">
+            <div className="brand-gradient brand-glow mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white">
               MA
             </div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              MA Importaciones
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <h1 className="text-2xl font-bold text-white">MA Importaciones</h1>
+            <p className="mt-1 text-sm text-zinc-400">
               Panel de gestión de arribos
             </p>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label className="mb-1.5 block text-sm font-medium text-zinc-300">
                 Usuario
               </label>
               <input
@@ -65,12 +63,12 @@ export default function LoginPage() {
                 value={user}
                 onChange={(e) => setUser(e.target.value)}
                 placeholder="admin"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                className="field"
                 required
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              <label className="mb-1.5 block text-sm font-medium text-zinc-300">
                 Contraseña
               </label>
               <input
@@ -79,13 +77,13 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-slate-900 outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-100"
+                className="field"
                 required
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 {error}
               </div>
             )}
@@ -93,13 +91,13 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="brand-gradient w-full rounded-xl px-4 py-3 font-semibold text-white shadow-lg transition hover:opacity-95 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-60"
+              className="brand-gradient brand-glow w-full rounded-xl px-4 py-3 font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loading ? "Ingresando…" : "Ingresar"}
             </button>
           </form>
 
-          <p className="mt-6 text-center text-xs text-slate-400">
+          <p className="mt-6 text-center text-xs text-zinc-500">
             Acceso restringido · MA Importaciones
           </p>
         </div>

@@ -69,8 +69,8 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
         onClick={() => setShowPanel(true)}
         className={
           hasProducts
-            ? "inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-            : "brand-gradient inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95"
+            ? "inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10"
+            : "brand-gradient brand-glow inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
         }
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
@@ -82,23 +82,23 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
       {showPanel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => !loading && setShowPanel(false)}
           />
-          <div className="animate-in relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="animate-in card relative w-full max-w-lg border-white/10 p-6 shadow-2xl">
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
+                <h2 className="text-lg font-bold text-white">
                   {hasProducts ? "Reemplazar Excel" : "Subir Excel"}
                 </h2>
-                <p className="text-sm text-slate-500">
+                <p className="text-sm text-zinc-400">
                   Se leerán las columnas y se extraerán las fotos incrustadas.
                 </p>
               </div>
               {!loading && (
                 <button
                   onClick={() => setShowPanel(false)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  className="rounded-lg p-1.5 text-zinc-500 transition hover:bg-white/10 hover:text-zinc-200"
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5">
                     <path d="M18 6 6 18M6 6l12 12" />
@@ -108,7 +108,7 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
             </div>
 
             {hasProducts && !result && !loading && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-sm text-amber-700">
+              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-2.5 text-sm text-amber-300">
                 Este contenedor ya tiene productos cargados. Subir un nuevo Excel
                 los reemplazará.
               </div>
@@ -129,28 +129,28 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
                 onClick={() => !loading && inputRef.current?.click()}
                 className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-10 text-center transition ${
                   dragging
-                    ? "border-indigo-400 bg-indigo-50"
-                    : "border-slate-300 bg-slate-50 hover:border-indigo-300 hover:bg-slate-100"
+                    ? "border-indigo-400 bg-indigo-500/10"
+                    : "border-white/15 bg-white/[0.03] hover:border-indigo-400/50 hover:bg-white/5"
                 } ${loading ? "pointer-events-none opacity-70" : ""}`}
               >
                 {loading ? (
                   <>
-                    <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-                    <p className="text-sm font-medium text-slate-600">
+                    <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-indigo-500/30 border-t-indigo-400" />
+                    <p className="text-sm font-medium text-zinc-300">
                       Procesando el Excel y extrayendo fotos…
                     </p>
                   </>
                 ) : (
                   <>
-                    <div className="brand-gradient mb-3 flex h-12 w-12 items-center justify-center rounded-xl text-white shadow-md">
+                    <div className="brand-gradient brand-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl text-white">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                         <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
                       </svg>
                     </div>
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-sm font-semibold text-zinc-200">
                       Arrastrá el archivo acá o hacé clic para elegir
                     </p>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p className="mt-1 text-xs text-zinc-500">
                       Formato .xlsx (con fotos incrustadas en la columna Foto)
                     </p>
                   </>
@@ -166,24 +166,24 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
             )}
 
             {error && (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 text-sm text-red-300">
                 {error}
               </div>
             )}
 
             {result && (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <div className="flex items-center gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
                   <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-emerald-800">
+                    <p className="text-sm font-semibold text-emerald-300">
                       ¡Excel cargado con éxito!
                     </p>
-                    <p className="text-xs text-emerald-700">
+                    <p className="text-xs text-emerald-400/80">
                       {result.totalRows} productos · {result.photosFound} fotos
                       detectadas
                     </p>
@@ -191,7 +191,7 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
                     Columnas detectadas
                   </p>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -200,17 +200,17 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
                       return (
                         <div
                           key={key}
-                          className="flex items-center gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs"
+                          className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 text-xs"
                         >
                           <span
                             className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                              detected ? "bg-emerald-500" : "bg-slate-300"
+                              detected ? "bg-emerald-400" : "bg-zinc-600"
                             }`}
                           />
-                          <span className="font-medium text-slate-600">
+                          <span className="font-medium text-zinc-300">
                             {label}
                           </span>
-                          <span className="ml-auto truncate text-slate-400">
+                          <span className="ml-auto truncate text-zinc-500">
                             {detected ?? "no encontrada"}
                           </span>
                         </div>
@@ -224,7 +224,7 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
                     setShowPanel(false);
                     setResult(null);
                   }}
-                  className="brand-gradient w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95"
+                  className="brand-gradient brand-glow w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
                 >
                   Ver productos
                 </button>

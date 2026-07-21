@@ -14,7 +14,7 @@ export default function MobileNav() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur md:hidden">
+    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">
       <div className="flex items-center gap-2">
         <div className="brand-gradient flex h-8 w-8 items-center justify-center rounded-lg text-xs font-black text-white">
           MA
@@ -27,7 +27,7 @@ export default function MobileNav() {
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                 isActive(item.href)
                   ? "brand-gradient text-white"
-                  : "text-slate-600 hover:bg-slate-100"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
               }`}
             >
               {item.label}
@@ -38,7 +38,7 @@ export default function MobileNav() {
       <form action="/api/logout" method="post">
         <button
           type="submit"
-          className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"
+          className="rounded-lg p-2 text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
           aria-label="Cerrar sesión"
         >
           <svg

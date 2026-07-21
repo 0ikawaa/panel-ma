@@ -59,14 +59,14 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
   const Header = ({ label, k, right }: { label: string; k: SortKey; right?: boolean }) => (
     <th
       onClick={() => toggleSort(k)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 transition hover:text-slate-800 ${
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 transition hover:text-white ${
         right ? "text-right" : "text-left"
       }`}
     >
       <span className="inline-flex items-center gap-1">
         {label}
         {sortKey === k && (
-          <span className="text-indigo-500">{asc ? "▲" : "▼"}</span>
+          <span className="text-indigo-400">{asc ? "▲" : "▼"}</span>
         )}
       </span>
     </th>
@@ -74,11 +74,11 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="card overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50/80">
+          <thead className="border-b border-white/10 bg-white/[0.03]">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Foto
               </th>
               <Header label="Código" k="codigo" />
@@ -88,14 +88,14 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
               <Header label="CBM total" k="cbmTotal" right />
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-white/5">
             {sorted.map((p) => (
-              <tr key={p.id} className="transition hover:bg-slate-50/70">
+              <tr key={p.id} className="transition hover:bg-white/[0.03]">
                 <td className="px-4 py-2.5">
                   {p.photo ? (
                     <button
                       onClick={() => setLightbox(p.photo)}
-                      className="group relative block h-14 w-14 overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                      className="group relative block h-14 w-14 overflow-hidden rounded-lg border border-white/10 bg-white/5"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -105,7 +105,7 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
                       />
                     </button>
                   ) : (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 text-slate-300">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/5 text-zinc-600">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-6 w-6">
                         <path d="M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6" strokeLinecap="round" strokeLinejoin="round" />
                         <circle cx="8.5" cy="9" r="1.5" />
@@ -113,34 +113,34 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-2.5 font-medium text-slate-800">
-                  {p.codigo ?? <span className="text-slate-300">—</span>}
+                <td className="px-4 py-2.5 font-medium text-zinc-100">
+                  {p.codigo ?? <span className="text-zinc-600">—</span>}
                 </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
                   {fmtUSD(p.precioChina)}
                 </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
                   {fmtInt(p.cantidadPorCaja)}
                 </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">
+                <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
                   {fmtCBM(p.cbmUnitario)}
                 </td>
-                <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-slate-900">
+                <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-white">
                   {fmtCBM(p.cbmTotal)}
                 </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-200 bg-slate-50 font-semibold text-slate-900">
+            <tr className="border-t-2 border-white/10 bg-white/[0.03] font-semibold text-white">
               <td className="px-4 py-3" colSpan={3}>
                 {totals.items} productos
               </td>
               <td className="px-4 py-3 text-right tabular-nums">
                 {fmtInt(totals.piezas)}
               </td>
-              <td className="px-4 py-3 text-right text-slate-400">Total →</td>
-              <td className="px-4 py-3 text-right tabular-nums text-indigo-600">
+              <td className="px-4 py-3 text-right text-zinc-500">Total →</td>
+              <td className="px-4 py-3 text-right tabular-nums text-indigo-400">
                 {fmtCBM(totals.cbmTotal)}
               </td>
             </tr>
@@ -150,7 +150,7 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
 
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 p-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm"
           onClick={() => setLightbox(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}

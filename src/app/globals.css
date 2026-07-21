@@ -1,15 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f6f7fb;
-  --foreground: #0f172a;
-  --brand: #4f46e5;
-  --brand-2: #7c3aed;
+  --background: #08080c;
+  --surface: #131319;
+  --surface-2: #1a1a23;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --foreground: #ececf1;
+  --muted: #a0a0ab;
+  --dim: #6b6b77;
+  --brand: #6366f1;
+  --brand-2: #a855f7;
+  --brand-soft: #818cf8;
+  --brand-glow: rgba(124, 92, 246, 0.5);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-muted: var(--muted);
   --color-brand: var(--brand);
   --color-brand-2: var(--brand-2);
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
@@ -24,19 +35,36 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Scrollbar sutil */
+/* Glow ambiental del fondo de la app */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(55rem 55rem at 8% -12%, rgba(99, 102, 241, 0.16), transparent 60%),
+    radial-gradient(45rem 45rem at 100% 0%, rgba(168, 85, 247, 0.13), transparent 55%);
+}
+
+::selection {
+  background: rgba(124, 92, 246, 0.35);
+  color: #fff;
+}
+
+/* Scrollbar oscuro y sutil */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #33333d;
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #474751;
   background-clip: content-box;
 }
 
@@ -55,12 +83,75 @@ body {
   animation: fadeInUp 0.35s ease both;
 }
 
+@keyframes floatSlow {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(4%, -6%) scale(1.08);
+  }
+}
+.animate-float {
+  animation: floatSlow 14s ease-in-out infinite;
+}
+
+/* Marca */
 .brand-gradient {
   background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
 }
 .brand-text {
-  background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+  background-image: linear-gradient(135deg, #a5b4fc 0%, #d8b4fe 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+.brand-glow {
+  box-shadow: 0 10px 30px -10px var(--brand-glow);
+}
+
+/* Superficies reutilizables */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+}
+.card-hover {
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.card-hover:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.8);
+}
+
+/* Campos de formulario */
+.field {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 0.7rem 0.9rem;
+  color: var(--foreground);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+.field::placeholder {
+  color: var(--dim);
+}
+.field:focus {
+  border-color: rgba(129, 140, 248, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.16);
+}
+/* El selector de fecha nativo en oscuro */
+.field[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7);
+  cursor: pointer;
 }

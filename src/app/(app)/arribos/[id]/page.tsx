@@ -30,7 +30,7 @@ export default async function ContainerDetailPage({
       {/* Migas + volver */}
       <Link
         href="/arribos"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition hover:text-slate-800"
+        className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-400 transition hover:text-white"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-4 w-4">
           <path d="m15 18-6-6 6-6" />
@@ -41,8 +41,8 @@ export default async function ContainerDetailPage({
       {/* Encabezado */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{container.name}</h1>
-          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-white">{container.name}</h1>
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
             {container.supplier && (
               <span className="inline-flex items-center gap-1.5">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4">
@@ -59,7 +59,7 @@ export default async function ContainerDetailPage({
             </span>
           </p>
           {container.notes && (
-            <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            <p className="mt-2 max-w-2xl text-sm text-zinc-400">
               {container.notes}
             </p>
           )}
@@ -75,27 +75,27 @@ export default async function ContainerDetailPage({
 
       {/* Estadísticas del contenedor */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Productos
           </p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">
+          <p className="mt-1 text-2xl font-bold text-white">
             {fmtInt(products.length)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             CBM total
           </p>
-          <p className="mt-1 text-2xl font-bold text-indigo-600">
+          <p className="mt-1 text-2xl font-bold text-indigo-400">
             {fmtCBM(cbmTotal)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
             Fotos
           </p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">
+          <p className="mt-1 text-2xl font-bold text-white">
             {fmtInt(photos)}
           </p>
         </div>
@@ -103,16 +103,16 @@ export default async function ContainerDetailPage({
 
       {/* Tabla o estado vacío */}
       {products.length === 0 ? (
-        <div className="flex flex-col items-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-          <div className="brand-gradient mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-white shadow-lg">
+        <div className="card flex flex-col items-center border-dashed px-6 py-16 text-center">
+          <div className="brand-gradient brand-glow mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-white">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
               <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />
             </svg>
           </div>
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-white">
             Subí el Excel de este contenedor
           </h2>
-          <p className="mt-1 max-w-md text-sm text-slate-500">
+          <p className="mt-1 max-w-md text-sm text-zinc-400">
             Con las columnas Foto, Código, Precio China, Cantidad por caja, CBM
             unitario y CBM total. Las fotos incrustadas se extraen
             automáticamente.

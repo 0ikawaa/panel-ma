@@ -7,9 +7,7 @@ const NAV = [
   {
     href: "/",
     label: "Inicio",
-    icon: (
-      <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" />
-    ),
+    icon: <path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" />,
   },
   {
     href: "/arribos",
@@ -29,14 +27,14 @@ export default function Sidebar() {
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-white/[0.02] backdrop-blur-xl md:flex">
       <div className="flex items-center gap-3 px-6 py-6">
-        <div className="brand-gradient flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black text-white shadow-md">
+        <div className="brand-gradient brand-glow flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black text-white">
           MA
         </div>
         <div className="leading-tight">
-          <p className="text-sm font-bold text-slate-900">MA Importaciones</p>
-          <p className="text-xs text-slate-400">Gestión de arribos</p>
+          <p className="text-sm font-bold text-white">MA Importaciones</p>
+          <p className="text-xs text-zinc-500">Gestión de arribos</p>
         </div>
       </div>
 
@@ -49,8 +47,8 @@ export default function Sidebar() {
               href={item.href}
               className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
                 active
-                  ? "brand-gradient text-white shadow-md"
-                  : "text-slate-600 hover:bg-slate-100"
+                  ? "brand-gradient brand-glow text-white"
+                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
               }`}
             >
               <svg
@@ -73,7 +71,7 @@ export default function Sidebar() {
       <form action="/api/logout" method="post" className="p-3">
         <button
           type="submit"
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-zinc-500 transition hover:bg-red-500/10 hover:text-red-400"
         >
           <svg
             viewBox="0 0 24 24"

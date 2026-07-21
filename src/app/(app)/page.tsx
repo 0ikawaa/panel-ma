@@ -57,8 +57,8 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Inicio</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-white">Inicio</h1>
+          <p className="mt-1 text-sm text-zinc-400">
             Resumen general de tus arribos y volúmenes.
           </p>
         </div>
@@ -70,18 +70,18 @@ export default async function DashboardPage() {
         {cards.map((c) => (
           <div
             key={c.label}
-            className="animate-in rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            className="animate-in card card-hover p-5"
           >
             <div
-              className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-md"
+              className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-lg"
               style={{ backgroundImage: c.gradient }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                 {c.icon}
               </svg>
             </div>
-            <p className="text-2xl font-bold text-slate-900">{c.value}</p>
-            <p className="mt-0.5 text-sm text-slate-500">{c.label}</p>
+            <p className="text-2xl font-bold text-white">{c.value}</p>
+            <p className="mt-0.5 text-sm text-zinc-400">{c.label}</p>
           </div>
         ))}
       </div>
@@ -89,35 +89,35 @@ export default async function DashboardPage() {
       {/* Contenedores recientes */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-white">
             Contenedores recientes
           </h2>
           <Link
             href="/arribos"
-            className="text-sm font-semibold text-indigo-600 hover:text-indigo-700"
+            className="text-sm font-semibold text-indigo-400 transition hover:text-indigo-300"
           >
             Ver todos →
           </Link>
         </div>
 
         {containers.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center">
-            <p className="text-slate-500">
+          <div className="card border-dashed p-12 text-center">
+            <p className="text-zinc-300">
               Todavía no cargaste ningún contenedor.
             </p>
-            <p className="mt-1 text-sm text-slate-400">
+            <p className="mt-1 text-sm text-zinc-500">
               Creá tu primer arribo para empezar.
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="card divide-y divide-white/5 overflow-hidden">
             {containers.map((c) => {
               const s = statMap.get(c.id);
               return (
                 <Link
                   key={c.id}
                   href={`/arribos/${c.id}`}
-                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-slate-50"
+                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-white/5"
                 >
                   <div className="brand-gradient flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -125,23 +125,23 @@ export default async function DashboardPage() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold text-slate-900">
+                    <p className="truncate font-semibold text-white">
                       {c.name}
                     </p>
-                    <p className="truncate text-sm text-slate-400">
+                    <p className="truncate text-sm text-zinc-500">
                       {c.supplier ? `${c.supplier} · ` : ""}
                       {fmtDate(c.eta)}
                     </p>
                   </div>
                   <div className="hidden text-right sm:block">
-                    <p className="text-sm font-semibold text-slate-700">
+                    <p className="text-sm font-semibold text-zinc-200">
                       {fmtInt(s?.count ?? 0)} prod.
                     </p>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-zinc-500">
                       {fmtCBM(s?.cbm ?? 0)}
                     </p>
                   </div>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5 text-slate-300">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5 text-zinc-600">
                     <path d="m9 18 6-6-6-6" />
                   </svg>
                 </Link>

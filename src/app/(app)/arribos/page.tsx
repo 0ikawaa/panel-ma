@@ -23,8 +23,8 @@ export default async function ArribosPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Arribos</h1>
-          <p className="mt-1 text-sm text-slate-500">
+          <h1 className="text-2xl font-bold text-white">Arribos</h1>
+          <p className="mt-1 text-sm text-zinc-400">
             Contenedores en camino y su volumen. Subí el Excel de cada uno.
           </p>
         </div>
@@ -32,16 +32,16 @@ export default async function ArribosPage() {
       </div>
 
       {containers.length === 0 ? (
-        <div className="flex flex-col items-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-          <div className="brand-gradient mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-white shadow-lg">
+        <div className="card flex flex-col items-center border-dashed px-6 py-16 text-center">
+          <div className="brand-gradient brand-glow mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-white">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" className="h-8 w-8">
               <path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 0 2-3h14l2 3M9 7v12M15 7v12" />
             </svg>
           </div>
-          <h2 className="text-lg font-bold text-slate-900">
+          <h2 className="text-lg font-bold text-white">
             Todavía no hay contenedores
           </h2>
-          <p className="mt-1 max-w-sm text-sm text-slate-500">
+          <p className="mt-1 max-w-sm text-sm text-zinc-400">
             Creá tu primer arribo, subí el Excel del proveedor y mostrá lo que
             viene con fotos, precios y volumen.
           </p>
@@ -57,7 +57,7 @@ export default async function ArribosPage() {
               <Link
                 key={c.id}
                 href={`/arribos/${c.id}`}
-                className="animate-in group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-lg"
+                className="animate-in group card card-hover flex flex-col overflow-hidden hover:-translate-y-0.5"
               >
                 <div className="brand-gradient relative h-24 p-4">
                   <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_-10%,rgba(255,255,255,0.35),transparent_50%)]" />
@@ -71,24 +71,24 @@ export default async function ArribosPage() {
                   </div>
                 </div>
                 <div className="flex flex-1 flex-col p-5">
-                  <h3 className="font-bold text-slate-900 group-hover:text-indigo-600">
+                  <h3 className="font-bold text-white transition group-hover:text-indigo-300">
                     {c.name}
                   </h3>
                   {c.supplier && (
-                    <p className="mt-0.5 text-sm text-slate-400">{c.supplier}</p>
+                    <p className="mt-0.5 text-sm text-zinc-500">{c.supplier}</p>
                   )}
-                  <div className="mt-4 flex items-center gap-4 border-t border-slate-100 pt-4">
+                  <div className="mt-4 flex items-center gap-4 border-t border-white/10 pt-4">
                     <div>
-                      <p className="text-lg font-bold text-slate-900">
+                      <p className="text-lg font-bold text-white">
                         {fmtInt(s?.count ?? 0)}
                       </p>
-                      <p className="text-xs text-slate-400">productos</p>
+                      <p className="text-xs text-zinc-500">productos</p>
                     </div>
                     <div className="ml-auto text-right">
-                      <p className="text-lg font-bold text-indigo-600">
+                      <p className="text-lg font-bold text-indigo-400">
                         {fmtCBM(s?.cbm ?? 0)}
                       </p>
-                      <p className="text-xs text-slate-400">volumen total</p>
+                      <p className="text-xs text-zinc-500">volumen total</p>
                     </div>
                   </div>
                 </div>
