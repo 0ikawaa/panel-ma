@@ -1,0 +1,40 @@
+// Esquema de base de datos - Plataforma MA Importaciones
+// Base de datos real (SQLite en local; ver README para pasar a Postgres en la nube)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// Un contenedor / arribo. Cada uno agrupa las líneas cargadas desde un Excel.
+model Container {
+  id        String    @id @default(cuid())
+  name      String // Ej: "Contenedor 1 - Julio 2026"
+  supplier  String? // Proveedor (opcional)
+  eta       DateTime? // Fecha estimada de arribo (opcional)
+  notes     String? // Notas (opcional)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
+}
+
+/// Una línea del Excel (un producto dentro de un contenedor).
+model Product {
+  id              String    @id @default(cuid())
+  containerId     String
+  container       Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  rowIndex        Int // Orden de la fila en el Excel
+  photo           String? // Foto en base64 (data URL) extraída de la celda
+  codigo          String?
+  precioChina     Float? // Precio en China (USD)
+  cantidadPorCaja Int?
+  cbmUnitario     Float?
+  cbmTotal        Float?
+  createdAt       DateTime  @default(now())
+
+  @@index([containerId])
+}
