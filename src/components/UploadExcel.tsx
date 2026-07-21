@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 
 interface Props {
   containerId: string;
@@ -39,11 +40,18 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
     setResult(null);
     setShowPanel(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
+      // 1) Subir el archivo directo a Vercel Blob (evita el límite de 4.5 MB).
+      const blob = await uploadToBlob(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+        contentType: file.type || undefined,
+      });
+
+      // 2) Pedirle al servidor que descargue del Blob y procese el Excel.
       const res = await fetch(`/api/containers/${containerId}/upload`, {
         method: "POST",
-        body: fd,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ blobUrl: blob.url }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -52,8 +60,10 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
         setResult(data);
         router.refresh();
       }
-    } catch {
-      setError("Error de conexión al subir el archivo");
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Error de conexión al subir el archivo",
+      );
     } finally {
       setLoading(false);
     }
