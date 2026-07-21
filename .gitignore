@@ -50,3 +50,5 @@ next-env.d.ts
 
 # script temporal de inspeccion
 /_inspect.mjs
+/_reprocess.ts
+/_headers.ts

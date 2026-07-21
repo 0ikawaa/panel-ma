@@ -6,6 +6,21 @@ import { parseExcel } from "@/lib/excel";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+// Descarga el blob reintentando: recién subido, el CDN puede tardar un
+// instante en servirlo y devolver 404/403 momentáneamente.
+async function downloadBlob(url: string, attempts = 7): Promise<Buffer> {
+  let lastStatus = 0;
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) return Buffer.from(await res.arrayBuffer());
+    lastStatus = res.status;
+    // Solo reintentamos ante "todavía no disponible" (404/403).
+    if (res.status !== 404 && res.status !== 403) break;
+    await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+  }
+  throw new Error(`Blob respondió ${lastStatus}`);
+}
+
 // POST /api/containers/:id/upload  (JSON: { blobUrl })
 // El navegador ya subió el Excel a Vercel Blob; acá lo descargamos y procesamos.
 export async function POST(
@@ -42,12 +57,10 @@ export async function POST(
     return NextResponse.json({ error: "Origen de archivo no permitido" }, { status: 400 });
   }
 
-  // Descargar el Excel desde Blob
+  // Descargar el Excel desde Blob (con reintentos por la propagación del CDN)
   let buffer: Buffer;
   try {
-    const res = await fetch(blobUrl);
-    if (!res.ok) throw new Error(`Blob respondió ${res.status}`);
-    buffer = Buffer.from(await res.arrayBuffer());
+    buffer = await downloadBlob(blobUrl);
   } catch (e) {
     console.error("Error al descargar el blob:", e);
     return NextResponse.json(

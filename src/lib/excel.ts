@@ -115,6 +115,9 @@ function scoreHeader(header: string, field: Field): number {
       if (has("foto") || has("imagen") || has("image") || has("photo") || has("picture") || has("pic")) return 3;
       return 0;
     case "codigo":
+      // Preferir la columna "MA CODE" por sobre otras columnas de código
+      // (p. ej. "IHOME CODE") cuando el Excel trae ambas.
+      if (has("ma code") || has("macode")) return 5;
       if (has("codigo") || has("code") || has("cod ") || h === "cod" || has("sku") || has("item") || has("modelo") || has("model") || has("ref") || has("art")) return 3;
       return 0;
     case "precioChina":
