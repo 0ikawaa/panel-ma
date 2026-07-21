@@ -115,7 +115,7 @@ function scoreHeader(header: string, field: Field): number {
       if (has("foto") || has("imagen") || has("image") || has("photo") || has("picture") || has("pic")) return 3;
       return 0;
     case "codigo":
-      if (has("codigo") || has("cod ") || h === "cod" || has("sku") || has("item") || has("modelo") || has("model") || has("ref") || has("art")) return 3;
+      if (has("codigo") || has("code") || has("cod ") || h === "cod" || has("sku") || has("item") || has("modelo") || has("model") || has("ref") || has("art")) return 3;
       return 0;
     case "precioChina":
       if (has("precio") || has("price") || has("fob") || has("costo") || has("usd") || has("china") || h.includes("$")) {
@@ -353,15 +353,15 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
         ? null
         : String(codigo).trim();
 
-    // Saltar filas totalmente vacías (sin datos ni foto)
-    const isEmpty =
-      !photo &&
-      !codigoStr &&
-      precioChina === null &&
-      cantidadPorCaja === null &&
-      cbmUnitario === null &&
-      cbmTotal === null;
-    if (isEmpty) continue;
+    // Una fila es un producto real solo si tiene código, precio, cantidad o
+    // CBM unitario. Así descartamos la fila de "TOTAL" (que trae únicamente el
+    // CBM total y duplicaría la suma) y las imágenes sueltas (solo foto).
+    const hasProductData =
+      codigoStr !== null ||
+      precioChina !== null ||
+      cantidadPorCaja !== null ||
+      cbmUnitario !== null;
+    if (!hasProductData) continue;
 
     order += 1;
     if (photo) photosFound += 1;
