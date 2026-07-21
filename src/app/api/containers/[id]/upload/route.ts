@@ -80,7 +80,10 @@ export async function POST(
     );
   } finally {
     // Borrar el archivo temporal del Blob (no bloqueamos si falla).
-    del(blobUrl).catch(() => {});
+    // TEMPORAL: desactivado para poder inspeccionar el archivo mientras
+    // desarrollamos las nuevas funciones (cantidades, códigos, agrupado).
+    void del;
+    // del(blobUrl).catch(() => {});
   }
 
   if (result.rows.length === 0) {
