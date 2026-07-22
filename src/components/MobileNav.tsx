@@ -5,23 +5,14 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", label: "Inicio" },
-  { href: "/arribos", label: "En camino" },
-  { href: "/arribos/recibidos", label: "Recibidos" },
-  { href: "/buscar", label: "Buscar" },
+  { href: "/arribos", label: "Embarques" },
+  { href: "/buscar", label: "Buscar SKU" },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    if (href === "/arribos")
-      return (
-        pathname === "/arribos" ||
-        (pathname.startsWith("/arribos/") &&
-          !pathname.startsWith("/arribos/recibidos"))
-      );
-    return pathname.startsWith(href);
-  };
+  const isActive = (href: string) =>
+    href === "/" ? pathname === "/" : pathname.startsWith(href);
 
   return (
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">

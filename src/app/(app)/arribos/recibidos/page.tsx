@@ -24,7 +24,7 @@ export default async function RecibidosPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Arribos recibidos</h1>
+        <h1 className="text-2xl font-bold text-white">Embarques</h1>
         <p className="mt-1 text-sm text-zinc-400">
           Contenedores que ya ingresaron al depósito.
         </p>
