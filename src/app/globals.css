@@ -9,10 +9,10 @@
   --foreground: #ececf1;
   --muted: #a0a0ab;
   --dim: #6b6b77;
-  --brand: #6366f1;
-  --brand-2: #a855f7;
-  --brand-soft: #818cf8;
-  --brand-glow: rgba(124, 92, 246, 0.5);
+  --brand: #14b8a6;
+  --brand-2: #0d9488;
+  --brand-soft: #2dd4bf;
+  --brand-glow: rgba(20, 184, 166, 0.5);
 }
 
 @theme inline {
@@ -43,8 +43,8 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(55rem 55rem at 8% -12%, rgba(99, 102, 241, 0.16), transparent 60%),
-    radial-gradient(45rem 45rem at 100% 0%, rgba(168, 85, 247, 0.13), transparent 55%);
+    radial-gradient(55rem 55rem at 8% -12%, rgba(20, 184, 166, 0.15), transparent 60%),
+    radial-gradient(45rem 45rem at 100% 0%, rgba(6, 182, 212, 0.12), transparent 55%);
 }
 
 ::selection {
@@ -101,13 +101,47 @@ body::before {
   background-image: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
 }
 .brand-text {
-  background-image: linear-gradient(135deg, #a5b4fc 0%, #d8b4fe 100%);
+  background-image: linear-gradient(135deg, #5eead4 0%, #2dd4bf 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 .brand-glow {
   box-shadow: 0 10px 30px -10px var(--brand-glow);
+}
+
+/* Botones primarios (los que usan .brand-gradient): brillo animado + elevación */
+button.brand-gradient {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+button.brand-gradient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.38) 50%,
+    transparent 68%
+  );
+  transform: translateX(-135%);
+}
+button.brand-gradient:hover::after {
+  animation: sheen 0.85s ease;
+}
+button.brand-gradient:hover {
+  transform: translateY(-1px);
+}
+button.brand-gradient:active {
+  transform: translateY(0);
+}
+@keyframes sheen {
+  to {
+    transform: translateX(135%);
+  }
 }
 
 /* Superficies reutilizables */

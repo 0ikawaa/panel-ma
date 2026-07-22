@@ -28,16 +28,14 @@ export default function Sidebar() {
 
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-white/[0.02] backdrop-blur-xl md:flex">
-      <div className="px-5 py-6">
-        <div className="rounded-xl bg-white p-2.5 shadow-sm">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-ma.jpg"
-            alt="MA Importaciones"
-            className="h-9 w-full object-contain"
-          />
-        </div>
-        <p className="mt-2.5 px-1 text-xs text-zinc-500">Gestión de arribos</p>
+      <div className="px-6 py-6">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo-ma.png"
+          alt="MA Importaciones"
+          className="h-11 w-auto object-contain"
+        />
+        <p className="mt-2 text-xs text-zinc-500">Gestión de arribos</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">

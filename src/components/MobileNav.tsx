@@ -16,14 +16,12 @@ export default function MobileNav() {
   return (
     <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">
       <div className="flex items-center gap-2">
-        <div className="rounded-md bg-white px-1.5 py-1">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo-ma.jpg"
-            alt="MA Importaciones"
-            className="h-5 w-auto object-contain"
-          />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logo-ma.png"
+          alt="MA Importaciones"
+          className="h-6 w-auto object-contain"
+        />
         <nav className="flex gap-1">
           {NAV.map((item) => (
             <Link

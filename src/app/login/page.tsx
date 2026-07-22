@@ -37,20 +37,18 @@ export default function LoginPage() {
   return (
     <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden px-4">
       {/* Orbes de color animados */}
-      <div className="animate-float absolute -left-32 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-indigo-600/25 blur-[120px]" />
-      <div className="animate-float absolute -right-24 bottom-0 -z-10 h-[26rem] w-[26rem] rounded-full bg-fuchsia-600/20 blur-[120px] [animation-delay:-7s]" />
+      <div className="animate-float absolute -left-32 top-0 -z-10 h-[28rem] w-[28rem] rounded-full bg-teal-500/25 blur-[120px]" />
+      <div className="animate-float absolute -right-24 bottom-0 -z-10 h-[26rem] w-[26rem] rounded-full bg-cyan-500/20 blur-[120px] [animation-delay:-7s]" />
 
       <div className="animate-in w-full max-w-md">
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-2xl sm:p-10">
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="mb-4 rounded-2xl bg-white p-4 shadow-lg">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo-ma.jpg"
-                alt="MA Importaciones"
-                className="h-14 w-auto object-contain"
-              />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-ma.png"
+              alt="MA Importaciones"
+              className="mb-5 h-16 w-auto object-contain"
+            />
             <p className="text-sm text-zinc-400">
               Panel de gestión de arribos
             </p>
