@@ -43,11 +43,15 @@ export default function LoginPage() {
       <div className="animate-in w-full max-w-md">
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-8 shadow-2xl backdrop-blur-2xl sm:p-10">
           <div className="mb-8 flex flex-col items-center text-center">
-            <div className="brand-gradient brand-glow mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white">
-              MA
+            <div className="mb-4 rounded-2xl bg-white p-4 shadow-lg">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo-ma.jpg"
+                alt="MA Importaciones"
+                className="h-14 w-auto object-contain"
+              />
             </div>
-            <h1 className="text-2xl font-bold text-white">MA Importaciones</h1>
-            <p className="mt-1 text-sm text-zinc-400">
+            <p className="text-sm text-zinc-400">
               Panel de gestión de arribos
             </p>
           </div>
