@@ -185,6 +185,8 @@ export default function ProductTable({
                           <img
                             src={p.photo}
                             alt={p.codigo ?? "Producto"}
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-cover transition group-hover:scale-105"
                           />
                         </button>

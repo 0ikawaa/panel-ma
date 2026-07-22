@@ -3,6 +3,7 @@ import { del } from "@vercel/blob";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseExcel } from "@/lib/excel";
+import { uploadDataUrlPhotos, deleteBlobPhotos } from "@/lib/photos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -87,30 +88,59 @@ export async function POST(
     );
   }
 
-  await prisma.$transaction([
-    prisma.product.deleteMany({ where: { containerId: id } }),
-    prisma.product.createMany({
-      data: result.items.map((it) => ({
-        containerId: id,
-        rowIndex: it.rowIndex,
-        photo: it.photo,
-        codigo: it.codigo,
-        precioChina: it.precioChina,
-        cantidadPorCaja: it.cantidadPorCaja,
-        unidades: it.unidades,
-        montoTotal: it.montoTotal,
-        unidad: it.unidad,
-        remark: it.remark,
-        cbmUnitario: it.cbmUnitario,
-        cbmTotal: it.cbmTotal,
-        detalle: it.detalle as unknown as Prisma.InputJsonValue,
-      })),
-    }),
-    prisma.container.update({
-      where: { id },
-      data: { updatedAt: new Date(), totalPrice: result.containerTotal },
-    }),
-  ]);
+  // Fotos que este contenedor tenía antes (para borrarlas de Blob al reemplazar).
+  const oldPhotos = (
+    await prisma.product.findMany({
+      where: { containerId: id },
+      select: { photo: true },
+    })
+  ).map((p) => p.photo);
+
+  // Subir las fotos nuevas a Blob y reemplazar el data URL por su URL pública.
+  // Si no hay token de Blob (dev local), el mapa viene vacío y se conserva el base64.
+  const photoMap = await uploadDataUrlPhotos(
+    result.items.map((it) => it.photo),
+    `containers/${id}`,
+  );
+  const newBlobUrls = Array.from(photoMap.values());
+
+  try {
+    await prisma.$transaction([
+      prisma.product.deleteMany({ where: { containerId: id } }),
+      prisma.product.createMany({
+        data: result.items.map((it) => ({
+          containerId: id,
+          rowIndex: it.rowIndex,
+          photo: it.photo ? photoMap.get(it.photo) ?? it.photo : null,
+          codigo: it.codigo,
+          precioChina: it.precioChina,
+          cantidadPorCaja: it.cantidadPorCaja,
+          unidades: it.unidades,
+          montoTotal: it.montoTotal,
+          unidad: it.unidad,
+          remark: it.remark,
+          cbmUnitario: it.cbmUnitario,
+          cbmTotal: it.cbmTotal,
+          detalle: it.detalle as unknown as Prisma.InputJsonValue,
+        })),
+      }),
+      prisma.container.update({
+        where: { id },
+        data: { updatedAt: new Date(), totalPrice: result.containerTotal },
+      }),
+    ]);
+  } catch (e) {
+    // Si falló la escritura, borrar las fotos recién subidas para no dejar huérfanas.
+    await deleteBlobPhotos(newBlobUrls);
+    console.error("Error al guardar los productos:", e);
+    return NextResponse.json(
+      { error: "No se pudieron guardar los productos." },
+      { status: 500 },
+    );
+  }
+
+  // Guardado OK: borrar de Blob las fotos del Excel anterior (best-effort).
+  await deleteBlobPhotos(oldPhotos);
 
   return NextResponse.json({
     ok: true,

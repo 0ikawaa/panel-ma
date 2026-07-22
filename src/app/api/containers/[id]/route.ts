@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { deleteBlobPhotos } from "@/lib/photos";
 
 // GET /api/containers/:id  -> detalle con productos
 export async function GET(
@@ -47,6 +48,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  // Recolectar las fotos para borrarlas de Blob después de eliminar el contenedor.
+  const photos = (
+    await prisma.product.findMany({
+      where: { containerId: id },
+      select: { photo: true },
+    })
+  ).map((p) => p.photo);
   await prisma.container.delete({ where: { id } });
+  await deleteBlobPhotos(photos);
   return NextResponse.json({ ok: true });
 }

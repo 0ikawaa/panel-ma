@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import UsersManager from "@/components/UsersManager";
+import AdminTools from "@/components/AdminTools";
+import { blobAvailable } from "@/lib/photos";
 
 export const dynamic = "force-dynamic";
 
@@ -7,6 +9,10 @@ export default async function AdminPage() {
   const users = await prisma.user.findMany({
     orderBy: { createdAt: "asc" },
     select: { id: true, username: true, name: true, modules: true, lastLoginAt: true },
+  });
+
+  const pendingPhotos = await prisma.product.count({
+    where: { photo: { startsWith: "data:" } },
   });
 
   return (
@@ -18,6 +24,7 @@ export default async function AdminPage() {
         </p>
       </div>
       <UsersManager initialUsers={users} />
+      <AdminTools initialRemaining={pendingPhotos} blobAvailable={blobAvailable()} />
     </div>
   );
 }

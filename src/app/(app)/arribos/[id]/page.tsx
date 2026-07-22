@@ -93,6 +93,17 @@ export default async function ContainerDetailPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ReceiveButton containerId={container.id} received={!!container.receivedAt} />
+          {products.length > 0 && (
+            <a
+              href={`/api/containers/${container.id}/export`}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M12 4v12m0 0-4-4m4 4 4-4M5 20h14" />
+              </svg>
+              Exportar Excel
+            </a>
+          )}
           <UploadExcel containerId={container.id} hasProducts={products.length > 0} />
           <DeleteContainerButton containerId={container.id} containerName={container.name} />
         </div>
