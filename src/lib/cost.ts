@@ -11,6 +11,18 @@ export const IVA = 1.22;
 
 export type Origin = "china" | "brasil";
 
+/**
+ * CBM por unidad = CBM de la columna del Excel (por caja) / unidades por caja (QTY/CTN).
+ * Devuelve null si falta el CBM o la cantidad por caja (o es 0).
+ */
+export function cbmPorUnidad(
+  cbmCaja: number | null | undefined,
+  unidadesPorCaja: number | null | undefined,
+): number | null {
+  if (cbmCaja == null || unidadesPorCaja == null || unidadesPorCaja === 0) return null;
+  return cbmCaja / unidadesPorCaja;
+}
+
 export interface LandedCost {
   origin: Origin;
   fob: number; // precio origen unitario

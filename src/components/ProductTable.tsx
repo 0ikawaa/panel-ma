@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { fmtCBM, fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
-import { landedCost, IVA, type Origin } from "@/lib/cost";
+import { landedCost, cbmPorUnidad, IVA, type Origin } from "@/lib/cost";
 
 export interface DetalleLinea {
   codigos: string[];
@@ -20,6 +20,7 @@ export interface ProductRow {
   codigo: string | null;
   precioChina: number | null;
   cbmUnitario: number | null;
+  cantidadPorCaja: number | null;
   unidades: number | null;
   montoTotal: number | null;
   unidad: string | null;
@@ -93,16 +94,28 @@ export default function ProductTable({
     });
   }
 
-  const Header = ({ label, k, right }: { label: string; k: SortKey; right?: boolean }) => (
+  const Header = ({
+    label,
+    k,
+    right,
+    accent,
+  }: {
+    label: string;
+    k: SortKey;
+    right?: boolean;
+    accent?: "red";
+  }) => (
     <th
       onClick={() => toggleSort(k)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 transition hover:text-white ${
-        right ? "text-right" : "text-left"
-      }`}
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide transition ${
+        accent === "red" ? "text-red-300 hover:text-red-200" : "text-zinc-400 hover:text-white"
+      } ${right ? "text-right" : "text-left"}`}
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        {sortKey === k && <span className="text-teal-400">{asc ? "▲" : "▼"}</span>}
+        {sortKey === k && (
+          <span className={accent === "red" ? "text-red-400" : "text-teal-400"}>{asc ? "▲" : "▼"}</span>
+        )}
       </span>
     </th>
   );
@@ -119,8 +132,10 @@ export default function ProductTable({
               </th>
               <Header label="Código" k="codigo" />
               <Header label="Unidades" k="unidades" right />
-              <Header label="Precio unit." k="precioChina" right />
-              <Header label="CBM total" k="cbmTotal" right />
+              <Header label="Precio unit." k="precioChina" right accent="red" />
+              <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                CBM u.
+              </th>
               <Header label="Precio lote" k="montoTotal" right />
               <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-teal-300">
                 Costo final /u
@@ -131,7 +146,8 @@ export default function ProductTable({
             {sorted.map((p) => {
               const expandable = hasDetail(p);
               const isOpen = expanded.has(p.id);
-              const lc = landedCost(origin as Origin, p.precioChina, p.cbmUnitario, freightCost);
+              const cbmU = cbmPorUnidad(p.cbmUnitario, p.cantidadPorCaja);
+              const lc = landedCost(origin as Origin, p.precioChina, cbmU, freightCost);
               return (
                 <Fragment key={p.id}>
                   <tr
@@ -190,11 +206,11 @@ export default function ProductTable({
                       {fmtInt(p.unidades)}
                       {p.unidad && <span className="ml-1 text-xs text-zinc-500">{p.unidad}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
+                    <td className="px-4 py-2.5 text-right font-bold tabular-nums text-red-400">
                       {fmtUSD(p.precioChina)}
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
-                      {fmtCBM(p.cbmTotal)}
+                      {fmtCBM(cbmU)}
                     </td>
                     <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-zinc-200">
                       {fmtUSD(p.montoTotal)}

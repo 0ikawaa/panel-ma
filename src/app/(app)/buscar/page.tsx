@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { fmtCBM, fmtDate, fmtUSD } from "@/lib/format";
+import { cbmPorUnidad } from "@/lib/cost";
 import type { DetalleLinea } from "@/components/ProductTable";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export default async function BuscarPage({
         codigo: true,
         precioChina: true,
         cbmUnitario: true,
+        cantidadPorCaja: true,
         detalle: true,
         container: {
           select: { name: true, eta: true, receivedAt: true },
@@ -62,7 +64,7 @@ export default async function BuscarPage({
       return {
         codigo,
         precioChina: ref.precioChina,
-        cbmUnitario: ref.cbmUnitario,
+        cbmUnitario: cbmPorUnidad(ref.cbmUnitario, ref.cantidadPorCaja),
         hasPlanned: recs.some((r) => !r.container.receivedAt),
         nextEta: inTransit[0]?.container.eta ?? null,
         containers: recs.map((r) => ({

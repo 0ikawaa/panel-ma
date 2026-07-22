@@ -36,6 +36,7 @@ export default async function ContainerDetailPage({
     codigo: p.codigo,
     precioChina: p.precioChina,
     cbmUnitario: p.cbmUnitario,
+    cantidadPorCaja: p.cantidadPorCaja,
     unidades: p.unidades,
     montoTotal: p.montoTotal,
     unidad: p.unidad,
@@ -152,8 +153,8 @@ export default async function ContainerDetailPage({
       {/* Costo de flete (solo China) */}
       {container.origin !== "brasil" && (
         <>
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 text-zinc-300">
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-5 py-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500 text-white">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
                 <path d="M10 17h4V5H2v12h3M20 17h1a1 1 0 0 0 1-1v-3.34a1 1 0 0 0-.3-.7l-2.66-2.66a1 1 0 0 0-.7-.3H14v8h1" />
                 <circle cx="7.5" cy="17.5" r="1.5" />
@@ -161,7 +162,7 @@ export default async function ContainerDetailPage({
               </svg>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-amber-300/80">
                 Costo de flete del contenedor
               </p>
               <p className="text-lg font-bold text-white">
