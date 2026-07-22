@@ -28,6 +28,11 @@ export async function authenticate(
   const ok = await bcrypt.compare(password, u.passwordHash);
   if (!ok) return null;
 
+  // Registrar el último acceso exitoso.
+  await prisma.user
+    .update({ where: { id: u.id }, data: { lastLoginAt: new Date() } })
+    .catch(() => {});
+
   return {
     user: u.username,
     name: u.name ?? undefined,

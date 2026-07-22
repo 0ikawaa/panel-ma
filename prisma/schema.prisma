@@ -75,6 +75,7 @@ model User {
   username     String   @unique
   passwordHash String
   name         String?
-  modules      String[] // ["inicio","embarques","buscar","admin"]
+  modules      String[] // ["inicio","embarques","admin"]
+  lastLoginAt  DateTime? // Último acceso exitoso
   createdAt    DateTime @default(now())
 }

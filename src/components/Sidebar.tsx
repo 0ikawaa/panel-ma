@@ -38,7 +38,9 @@ export default function Sidebar({
 
   const subLinkClass = (active: boolean) =>
     `flex items-center gap-2.5 rounded-lg py-2 pl-4 pr-3 text-sm font-medium transition ${
-      active ? "bg-white/10 text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"
+      active
+        ? "bg-indigo-500/15 text-indigo-100"
+        : "text-zinc-400 hover:bg-white/5 hover:text-white"
     }`;
 
   const icon = (children: React.ReactNode) => (

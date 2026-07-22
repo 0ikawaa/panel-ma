@@ -46,3 +46,16 @@ export function fmtDate(d: Date | string | null | undefined): string {
     year: "numeric",
   });
 }
+
+/** Fecha + hora, ej. "22 jul 2026, 14:35". */
+export function fmtDateTime(d: Date | string | null | undefined): string {
+  if (!d) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleString(LOCALE, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}

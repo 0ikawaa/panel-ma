@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { MODULES } from "@/lib/modules";
+import { fmtDateTime } from "@/lib/format";
 
 interface User {
   id: string;
   username: string;
   name: string | null;
   modules: string[];
+  lastLoginAt?: string | Date | null;
 }
 
 function ModuleChecks({
@@ -203,6 +205,17 @@ export default function UsersManager({ initialUsers }: { initialUsers: User[] })
               <div className="min-w-0">
                 <p className="font-semibold text-white">{u.name ?? u.username}</p>
                 <p className="text-xs text-zinc-500">@{u.username}</p>
+                <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-500">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                  {u.lastLoginAt ? (
+                    <>Último acceso: <span className="text-zinc-400">{fmtDateTime(u.lastLoginAt)}</span></>
+                  ) : (
+                    <span className="text-zinc-600">Nunca ingresó</span>
+                  )}
+                </p>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <button
