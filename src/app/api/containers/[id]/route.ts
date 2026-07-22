@@ -29,6 +29,7 @@ export async function PATCH(
   if ("supplier" in body) data.supplier = body.supplier?.trim() || null;
   if ("eta" in body) data.eta = body.eta ? new Date(body.eta) : null;
   if ("notes" in body) data.notes = body.notes?.trim() || null;
+  if ("received" in body) data.receivedAt = body.received ? new Date() : null;
 
   const container = await prisma.container.update({ where: { id }, data });
   return NextResponse.json(container);

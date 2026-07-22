@@ -11,7 +11,7 @@ const NAV = [
   },
   {
     href: "/arribos",
-    label: "Arribos",
+    label: "En camino",
     icon: (
       <>
         <path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />
@@ -19,12 +19,40 @@ const NAV = [
       </>
     ),
   },
+  {
+    href: "/arribos/recibidos",
+    label: "Recibidos",
+    icon: (
+      <>
+        <path d="M3 12h4l2 3h6l2-3h4" />
+        <path d="M5 12V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6M12 3v6m0 0-2.5-2.5M12 9l2.5-2.5" />
+      </>
+    ),
+  },
+  {
+    href: "/buscar",
+    label: "Buscar SKU",
+    icon: (
+      <>
+        <circle cx="11" cy="11" r="7" />
+        <path d="m21 21-4.3-4.3" />
+      </>
+    ),
+  },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/arribos")
+      return (
+        pathname === "/arribos" ||
+        (pathname.startsWith("/arribos/") &&
+          !pathname.startsWith("/arribos/recibidos"))
+      );
+    return pathname.startsWith(href);
+  };
 
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-white/[0.02] backdrop-blur-xl md:flex">

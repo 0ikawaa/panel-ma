@@ -5,6 +5,8 @@ import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
 import DeleteContainerButton from "@/components/DeleteContainerButton";
+import EditEtaButton from "@/components/EditEtaButton";
+import ReceiveButton from "@/components/ReceiveButton";
 
 export const dynamic = "force-dynamic";
 
@@ -74,22 +76,58 @@ export default async function ContainerDetailPage({
                 {container.supplier}
               </span>
             )}
-            <span className="inline-flex items-center gap-1.5">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4">
-                <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Arribo: {fmtDate(container.eta)}
-            </span>
           </p>
           {container.notes && (
             <p className="mt-2 max-w-2xl text-sm text-zinc-400">{container.notes}</p>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ReceiveButton containerId={container.id} received={!!container.receivedAt} />
           <UploadExcel containerId={container.id} hasProducts={products.length > 0} />
           <DeleteContainerButton containerId={container.id} containerName={container.name} />
         </div>
       </div>
+
+      {/* Estado y fecha de arribo — destacado */}
+      {container.receivedAt ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 px-5 py-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-500 text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-emerald-300/80">
+              Recibido en depósito
+            </p>
+            <p className="text-lg font-bold text-emerald-200">
+              {fmtDate(container.receivedAt)}
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-teal-500/30 bg-teal-500/10 px-5 py-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-500 text-white">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+              <path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-teal-300/80">
+              Próximo arribo estimado
+            </p>
+            <p className="text-lg font-bold text-white">
+              {container.eta ? fmtDate(container.eta) : "Sin fecha definida"}
+            </p>
+          </div>
+          <div className="ml-auto">
+            <EditEtaButton
+              containerId={container.id}
+              eta={container.eta ? container.eta.toISOString() : null}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Estadísticas del contenedor */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

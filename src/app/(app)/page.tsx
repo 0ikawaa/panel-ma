@@ -13,7 +13,10 @@ export default async function DashboardPage() {
         _count: { _all: true },
         _sum: { cbmTotal: true },
       }),
-      prisma.container.aggregate({ _sum: { totalPrice: true } }),
+      prisma.container.aggregate({
+        where: { receivedAt: null },
+        _sum: { totalPrice: true },
+      }),
       prisma.container.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
       prisma.product.groupBy({
         by: ["containerId"],

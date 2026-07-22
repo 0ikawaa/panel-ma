@@ -19,9 +19,12 @@ model Container {
   eta        DateTime? // Fecha estimada de arribo (opcional)
   notes      String? // Notas (opcional)
   totalPrice Float? // Precio total del contenedor (fila "TOTAL" del Excel)
+  receivedAt DateTime? // Fecha en que ingresó al depósito (null = en camino)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   products   Product[]
+
+  @@index([receivedAt])
 }
 
 /// Una línea del Excel (un producto dentro de un contenedor).

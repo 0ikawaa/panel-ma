@@ -5,39 +5,47 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", label: "Inicio" },
-  { href: "/arribos", label: "Arribos" },
+  { href: "/arribos", label: "En camino" },
+  { href: "/arribos/recibidos", label: "Recibidos" },
+  { href: "/buscar", label: "Buscar" },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/arribos")
+      return (
+        pathname === "/arribos" ||
+        (pathname.startsWith("/arribos/") &&
+          !pathname.startsWith("/arribos/recibidos"))
+      );
+    return pathname.startsWith(href);
+  };
 
   return (
-    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">
-      <div className="flex items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/logo-ma.png"
-          alt="MA Importaciones"
-          className="h-6 w-auto object-contain"
-        />
-        <nav className="flex gap-1">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
-                isActive(item.href)
-                  ? "brand-gradient text-white"
-                  : "text-zinc-400 hover:bg-white/5 hover:text-white"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
+    <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo-ma.png"
+        alt="MA Importaciones"
+        className="h-6 w-auto shrink-0 object-contain"
+      />
+      <nav className="flex flex-1 gap-1 overflow-x-auto">
+        {NAV.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={`shrink-0 rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+              isActive(item.href)
+                ? "brand-gradient text-white"
+                : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            {item.label}
+          </Link>
+        ))}
+      </nav>
       <form action="/api/logout" method="post">
         <button
           type="submit"
