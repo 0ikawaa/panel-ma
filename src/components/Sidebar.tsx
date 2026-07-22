@@ -22,6 +22,17 @@ const NAV = [
     ),
   },
   {
+    href: "/reposicion",
+    module: "reposicion",
+    label: "Reposición",
+    icon: (
+      <>
+        <path d="M3 3v18h18" />
+        <path d="M7 14l3-3 3 3 5-6" />
+      </>
+    ),
+  },
+  {
     href: "/buscar",
     module: "buscar",
     label: "Buscar SKU",

@@ -54,6 +54,21 @@ model Product {
   @@index([containerId])
 }
 
+/// Un análisis de reposición: cruza las ventas de un período con el stock
+/// disponible y sugiere cuánto pedir. Ventas y stock se guardan como JSON.
+model Reposicion {
+  id         String   @id @default(cuid())
+  name       String // Ej: "Reposición mayo 2026"
+  periodo    String? // Período detectado del Excel de ventas (ej. "mayo 2026")
+  meses      Int      @default(4) // Meses de cobertura a pedir
+  ventas     Json? // [{ codigo, titulo, unidades }]
+  stock      Json? // [{ codigo, titulo, disponible }]
+  ventasFile String? // Nombre del último archivo de ventas subido
+  stockFile  String? // Nombre del último archivo de stock subido
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 /// Usuario de la plataforma con acceso por módulos.
 model User {
   id           String   @id @default(cuid())

@@ -9,6 +9,7 @@ export interface ModuleDef {
 export const MODULES: ModuleDef[] = [
   { key: "inicio", label: "Inicio", path: "/" },
   { key: "embarques", label: "Embarques", path: "/arribos" },
+  { key: "reposicion", label: "Reposición", path: "/reposicion" },
   { key: "buscar", label: "Buscar SKU", path: "/buscar" },
   { key: "admin", label: "Administración", path: "/admin" },
 ];
@@ -19,14 +20,14 @@ export const ALL_MODULES = MODULES.map((m) => m.key);
 export function moduleForPath(pathname: string): string | null {
   if (pathname === "/") return "inicio";
   if (pathname.startsWith("/arribos")) return "embarques";
+  if (pathname.startsWith("/reposicion")) return "reposicion";
   if (pathname.startsWith("/buscar")) return "buscar";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/api/admin")) return "admin";
-  if (
-    pathname.startsWith("/api/containers") ||
-    pathname.startsWith("/api/blob")
-  )
-    return "embarques";
+  if (pathname.startsWith("/api/reposicion")) return "reposicion";
+  if (pathname.startsWith("/api/containers")) return "embarques";
+  // /api/blob solo emite el token de subida (cualquier sesión); el
+  // procesamiento real está protegido por cada endpoint.
   return null;
 }
 
