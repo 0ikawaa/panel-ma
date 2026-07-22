@@ -35,6 +35,7 @@ export async function PATCH(
     data.freightCost =
       f === null || f === "" || isNaN(Number(f)) ? null : Number(f);
   }
+  if ("origin" in body) data.origin = body.origin === "brasil" ? "brasil" : "china";
 
   const container = await prisma.container.update({ where: { id }, data });
   return NextResponse.json(container);

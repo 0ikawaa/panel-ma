@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import NewContainerButton from "@/components/NewContainerButton";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +44,7 @@ export default async function DashboardPage() {
     },
     {
       label: "CBM total",
-      value: fmtCBM(productAgg._sum.cbmTotal ?? 0),
+      value: fmtCBM2(productAgg._sum.cbmTotal ?? 0),
       gradient: "linear-gradient(135deg,#8b5cf6,#6366f1)",
       icon: <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />,
     },
@@ -141,7 +141,7 @@ export default async function DashboardPage() {
                       {c.totalPrice != null ? fmtUSD(c.totalPrice) : "—"}
                     </p>
                     <p className="hidden text-xs text-zinc-500 sm:block">
-                      {fmtInt(s?.count ?? 0)} ítems · {fmtCBM(s?.cbm ?? 0)}
+                      {fmtInt(s?.count ?? 0)} ítems · {fmtCBM2(s?.cbm ?? 0)}
                     </p>
                   </div>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5 text-zinc-600">

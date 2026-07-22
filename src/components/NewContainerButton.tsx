@@ -10,6 +10,7 @@ export default function NewContainerButton() {
   const [supplier, setSupplier] = useState("");
   const [eta, setEta] = useState("");
   const [freight, setFreight] = useState("");
+  const [origin, setOrigin] = useState<"china" | "brasil">("china");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +20,7 @@ export default function NewContainerButton() {
     setSupplier("");
     setEta("");
     setFreight("");
+    setOrigin("china");
     setNotes("");
     setError(null);
   }
@@ -31,7 +33,7 @@ export default function NewContainerButton() {
       const res = await fetch("/api/containers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, supplier, eta, notes, freightCost: freight }),
+        body: JSON.stringify({ name, supplier, eta, notes, freightCost: freight, origin }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -89,6 +91,27 @@ export default function NewContainerButton() {
                   required
                 />
               </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-zinc-300">
+                  Origen
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["china", "brasil"] as const).map((o) => (
+                    <button
+                      key={o}
+                      type="button"
+                      onClick={() => setOrigin(o)}
+                      className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+                        origin === o
+                          ? "border-teal-500/40 bg-teal-500/15 text-teal-200"
+                          : "border-white/10 bg-white/[0.02] text-zinc-400 hover:bg-white/5"
+                      }`}
+                    >
+                      {o === "china" ? "🇨🇳 China" : "🇧🇷 Brasil"}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-300">
@@ -113,20 +136,22 @@ export default function NewContainerButton() {
                   />
                 </div>
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-300">
-                  Costo de flete (US$)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={freight}
-                  onChange={(e) => setFreight(e.target.value)}
-                  placeholder="Opcional · para el costo final por producto"
-                  className="field"
-                />
-              </div>
+              {origin === "china" && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-zinc-300">
+                    Costo de flete (US$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={freight}
+                    onChange={(e) => setFreight(e.target.value)}
+                    placeholder="Opcional · para el costo final por producto"
+                    className="field"
+                  />
+                </div>
+              )}
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-300">
                   Notas

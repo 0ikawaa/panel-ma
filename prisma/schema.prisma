@@ -20,6 +20,7 @@ model Container {
   notes      String? // Notas (opcional)
   totalPrice Float? // Precio total del contenedor (fila "TOTAL" del Excel)
   freightCost Float? // Costo del flete del contenedor (USD)
+  origin     String  @default("china") // "china" | "brasil"
   receivedAt DateTime? // Fecha en que ingresó al depósito (null = en camino)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

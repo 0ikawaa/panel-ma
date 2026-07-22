@@ -69,7 +69,7 @@ export default function Sidebar({
           alt="MA Importaciones"
           className="h-11 w-auto object-contain"
         />
-        <p className="mt-2 text-xs text-zinc-500">Gestión de arribos</p>
+        <p className="mt-2 text-xs text-zinc-500">Panel MA</p>
       </div>
 
       <nav className="flex-1 space-y-1 px-3 py-2">

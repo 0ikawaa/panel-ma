@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
 import DeleteContainerButton from "@/components/DeleteContainerButton";
 import EditEtaButton from "@/components/EditEtaButton";
 import EditFreightButton from "@/components/EditFreightButton";
 import ReceiveButton from "@/components/ReceiveButton";
+import OriginSwitch from "@/components/OriginSwitch";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function ContainerDetailPage({
   const stats = [
     { label: "Ítems", value: fmtInt(products.length), accent: false },
     { label: "Unidades", value: fmtInt(unidades), accent: false },
-    { label: "CBM total", value: fmtCBM(cbmTotal), accent: false },
+    { label: "CBM total", value: fmtCBM2(cbmTotal), accent: false },
     {
       label: "Precio del contenedor",
       value: fmtUSD(container.totalPrice),
@@ -131,37 +132,58 @@ export default async function ContainerDetailPage({
         </div>
       )}
 
-      {/* Costo de flete (para el costo final por producto) */}
+      {/* Origen del contenedor */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 text-zinc-300">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-            <path d="M10 17h4V5H2v12h3M20 17h1a1 1 0 0 0 1-1v-3.34a1 1 0 0 0-.3-.7l-2.66-2.66a1 1 0 0 0-.7-.3H14v8h1" />
-            <circle cx="7.5" cy="17.5" r="1.5" />
-            <circle cx="17.5" cy="17.5" r="1.5" />
-          </svg>
-        </div>
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-            Costo de flete del contenedor
+            Origen del contenedor
           </p>
-          <p className="text-lg font-bold text-white">
-            {container.freightCost != null
-              ? fmtUSD(container.freightCost)
-              : "Sin definir"}
+          <p className="text-sm text-zinc-400">
+            {container.origin === "brasil"
+              ? "Costo nacionalizado = precio origen × 1,15 × 1,22"
+              : "Costo nacionalizado con flete + 33% + IVA"}
           </p>
         </div>
         <div className="ml-auto">
-          <EditFreightButton
-            containerId={container.id}
-            freightCost={container.freightCost}
-          />
+          <OriginSwitch containerId={container.id} origin={container.origin} />
         </div>
       </div>
 
-      {container.freightCost == null && products.length > 0 && (
-        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
-          Cargá el costo de flete para ver el <b>costo final nacionalizado</b> de cada producto.
-        </div>
+      {/* Costo de flete (solo China) */}
+      {container.origin !== "brasil" && (
+        <>
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-5 py-4">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 text-zinc-300">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+                <path d="M10 17h4V5H2v12h3M20 17h1a1 1 0 0 0 1-1v-3.34a1 1 0 0 0-.3-.7l-2.66-2.66a1 1 0 0 0-.7-.3H14v8h1" />
+                <circle cx="7.5" cy="17.5" r="1.5" />
+                <circle cx="17.5" cy="17.5" r="1.5" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Costo de flete del contenedor
+              </p>
+              <p className="text-lg font-bold text-white">
+                {container.freightCost != null
+                  ? fmtUSD(container.freightCost)
+                  : "Sin definir"}
+              </p>
+            </div>
+            <div className="ml-auto">
+              <EditFreightButton
+                containerId={container.id}
+                freightCost={container.freightCost}
+              />
+            </div>
+          </div>
+
+          {container.freightCost == null && products.length > 0 && (
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
+              Cargá el costo de flete para ver el <b>costo final nacionalizado</b> de cada producto.
+            </div>
+          )}
+        </>
       )}
 
       {/* Estadísticas del contenedor */}
@@ -207,7 +229,11 @@ export default async function ContainerDetailPage({
           </div>
         </div>
       ) : (
-        <ProductTable products={rows} freightCost={container.freightCost} />
+        <ProductTable
+          products={rows}
+          freightCost={container.freightCost}
+          origin={container.origin}
+        />
       )}
     </div>
   );

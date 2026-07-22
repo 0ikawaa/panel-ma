@@ -17,7 +17,7 @@ export async function authenticate(
   if (username === envUser && password === envPass) {
     return {
       user: username,
-      name: "Administrador",
+      name: "Matias",
       modules: [...ALL_MODULES],
       isAdmin: true,
     };

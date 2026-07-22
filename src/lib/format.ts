@@ -10,6 +10,17 @@ export function fmtCBM(n: number | null | undefined): string {
   );
 }
 
+/** Volumen total (siempre con 2 decimales). */
+export function fmtCBM2(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  return (
+    n.toLocaleString(LOCALE, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " m³"
+  );
+}
+
 export function fmtUSD(n: number | null | undefined): string {
   if (n === null || n === undefined) return "—";
   return (

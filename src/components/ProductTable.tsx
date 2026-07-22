@@ -1,8 +1,8 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { fmtCBM, fmtInt, fmtUSD } from "@/lib/format";
-import { landedCost, INCIDENCIA, IVA } from "@/lib/cost";
+import { fmtCBM, fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
+import { landedCost, IVA, type Origin } from "@/lib/cost";
 
 export interface DetalleLinea {
   codigos: string[];
@@ -38,9 +38,11 @@ function hasDetail(p: ProductRow): boolean {
 export default function ProductTable({
   products,
   freightCost,
+  origin,
 }: {
   products: ProductRow[];
   freightCost: number | null;
+  origin: string;
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -129,7 +131,7 @@ export default function ProductTable({
             {sorted.map((p) => {
               const expandable = hasDetail(p);
               const isOpen = expanded.has(p.id);
-              const lc = landedCost(p.precioChina, p.cbmUnitario, freightCost);
+              const lc = landedCost(origin as Origin, p.precioChina, p.cbmUnitario, freightCost);
               return (
                 <Fragment key={p.id}>
                   <tr
@@ -226,7 +228,7 @@ export default function ProductTable({
               </td>
               <td className="px-4 py-3 text-right tabular-nums">{fmtInt(totals.unidades)}</td>
               <td className="px-4 py-3 text-right text-zinc-500">Total →</td>
-              <td className="px-4 py-3 text-right tabular-nums text-teal-400">{fmtCBM(totals.cbmTotal)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-teal-400">{fmtCBM2(totals.cbmTotal)}</td>
               <td className="px-4 py-3 text-right tabular-nums text-zinc-200">{fmtUSD(totals.monto)}</td>
               <td className="px-4 py-3" />
             </tr>
@@ -275,13 +277,23 @@ function DetallePanel({
             Costo final por unidad (nacionalizado, IVA inc.)
           </p>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-300">
-            <span>FOB {fmtUSD(p.precioChina)}</span>
-            <span className="text-zinc-600">+</span>
-            <span>flete {fmtUSD(lc.fleteUnitario)}</span>
-            <span className="text-zinc-600">→</span>
-            <span>{fmtUSD(lc.base)}</span>
-            <span className="text-zinc-600">×{INCIDENCIA} (nac.)</span>
-            <span className="text-zinc-600">×{IVA} (IVA)</span>
+            {lc.origin === "brasil" ? (
+              <>
+                <span>Precio origen {fmtUSD(lc.fob)}</span>
+                <span className="text-zinc-600">×{lc.incidencia} (nac.)</span>
+                <span className="text-zinc-600">×{IVA} (IVA)</span>
+              </>
+            ) : (
+              <>
+                <span>FOB {fmtUSD(lc.fob)}</span>
+                <span className="text-zinc-600">+</span>
+                <span>flete {fmtUSD(lc.fleteUnitario)}</span>
+                <span className="text-zinc-600">→</span>
+                <span>{fmtUSD(lc.base)}</span>
+                <span className="text-zinc-600">×{lc.incidencia} (nac.)</span>
+                <span className="text-zinc-600">×{IVA} (IVA)</span>
+              </>
+            )}
             <span className="text-zinc-600">=</span>
             <span className="rounded-md bg-teal-500/15 px-2 py-0.5 font-bold text-teal-200">
               {fmtUSD(lc.final)}

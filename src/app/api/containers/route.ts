@@ -37,6 +37,7 @@ export async function POST(req: Request) {
     eta?: string;
     notes?: string;
     freightCost?: number | string;
+    origin?: string;
   };
   try {
     body = await req.json();
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
       eta: body.eta ? new Date(body.eta) : null,
       notes: body.notes?.trim() || null,
       freightCost: freight != null && isFinite(freight) ? freight : null,
+      origin: body.origin === "brasil" ? "brasil" : "china",
     },
   });
 

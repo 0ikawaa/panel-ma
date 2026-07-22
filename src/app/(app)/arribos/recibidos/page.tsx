@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import EmbarquesTabs from "@/components/EmbarquesTabs";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +97,7 @@ export default async function RecibidosPage() {
                       <p className="text-xs text-zinc-500">ítems</p>
                     </div>
                     <div className="ml-auto text-right">
-                      <p className="text-lg font-bold text-indigo-400">{fmtCBM(s?.cbm ?? 0)}</p>
+                      <p className="text-lg font-bold text-indigo-400">{fmtCBM2(s?.cbm ?? 0)}</p>
                       <p className="text-xs text-zinc-500">volumen total</p>
                     </div>
                   </div>
