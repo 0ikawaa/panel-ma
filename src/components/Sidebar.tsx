@@ -13,7 +13,7 @@ const NAV = [
   {
     href: "/arribos",
     module: "embarques",
-    label: "Embarques",
+    label: "Importaciones",
     icon: (
       <>
         <path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" />

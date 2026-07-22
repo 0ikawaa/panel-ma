@@ -219,6 +219,10 @@ export function parseStock(buffer: Buffer | ArrayBuffer): StockResult {
 /**
  * Cruza ventas y stock por código y calcula la reposición sugerida:
  *   sugerida = max(0, round(vendidas * meses − stockDisponible))
+ * Reglas:
+ *  - Solo se consideran códigos que empiezan con número (se descartan
+ *    "self_service", "drop_off", etc.).
+ *  - El stock negativo se toma como 0 (no descuenta de la reposición).
  * La lista se basa en los códigos que tuvieron ventas.
  */
 export function combinarReposicion(
@@ -227,16 +231,20 @@ export function combinarReposicion(
   meses: number,
 ): ReposicionRow[] {
   const stockMap = new Map(stock.map((s) => [s.codigo, s]));
-  return ventas.map((v) => {
-    const s = stockMap.get(v.codigo);
-    const disponible = s?.disponible ?? null;
-    const sugerida = Math.max(0, Math.round(v.unidades * meses - (disponible ?? 0)));
-    return {
-      codigo: v.codigo,
-      titulo: s?.titulo ?? v.titulo,
-      vendidas: v.unidades,
-      stock: disponible,
-      sugerida,
-    };
-  });
+  return ventas
+    .filter((v) => /^\d/.test(v.codigo))
+    .map((v) => {
+      const s = stockMap.get(v.codigo);
+      const raw = s?.disponible ?? null;
+      // Stock negativo -> 0 para no distorsionar la cuenta.
+      const disponible = raw != null ? Math.max(0, raw) : null;
+      const sugerida = Math.max(0, Math.round(v.unidades * meses - (disponible ?? 0)));
+      return {
+        codigo: v.codigo,
+        titulo: s?.titulo ?? v.titulo,
+        vendidas: v.unidades,
+        stock: disponible,
+        sugerida,
+      };
+    });
 }

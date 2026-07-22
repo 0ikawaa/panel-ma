@@ -8,7 +8,7 @@ export interface ModuleDef {
 
 export const MODULES: ModuleDef[] = [
   { key: "inicio", label: "Inicio", path: "/" },
-  { key: "embarques", label: "Embarques", path: "/arribos" },
+  { key: "embarques", label: "Importaciones", path: "/arribos" },
   { key: "reposicion", label: "Reposición", path: "/reposicion" },
   { key: "buscar", label: "Buscar SKU", path: "/buscar" },
   { key: "admin", label: "Administración", path: "/admin" },

@@ -83,25 +83,30 @@ export default function ReposicionTable({ rows, meses }: { rows: ReposRow[]; mes
     URL.revokeObjectURL(url);
   }
 
-  const th = (label: string, k: SortKey, right?: boolean) => (
+  const th = (label: string, k: SortKey, right?: boolean, accent?: boolean) => (
     <th
       key={k}
       onClick={() => toggleSort(k)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-400 transition hover:text-white ${
-        right ? "text-right" : "text-left"
-      }`}
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3.5 text-xs font-semibold uppercase tracking-wide transition ${
+        accent ? "text-teal-300 hover:text-teal-200" : "text-zinc-400 hover:text-white"
+      } ${right ? "text-right" : "text-left"}`}
     >
-      <span className="inline-flex items-center gap-1">
+      <span className={`inline-flex items-center gap-1 ${right ? "justify-end" : ""}`}>
         {label}
-        {sortKey === k && <span className="text-teal-400">{asc ? "▲" : "▼"}</span>}
+        {sortKey === k && <span className={accent ? "text-teal-300" : "text-teal-400"}>{asc ? "▲" : "▼"}</span>}
       </span>
     </th>
   );
 
+  const quickSort = (k: SortKey) => {
+    setSortKey(k);
+    setAsc(false);
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500">
             <circle cx="11" cy="11" r="7" />
             <path d="m21 21-4.3-4.3" />
@@ -113,6 +118,27 @@ export default function ReposicionTable({ rows, meses }: { rows: ReposRow[]; mes
             className="field !pl-11"
           />
         </div>
+
+        {/* Orden rápido */}
+        <div className="inline-flex overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
+          <button
+            onClick={() => quickSort("sugerida")}
+            className={`px-3.5 py-2.5 text-sm font-semibold transition ${
+              sortKey === "sugerida" ? "bg-teal-500/15 text-teal-200" : "text-zinc-400 hover:bg-white/5"
+            }`}
+          >
+            Más a reponer
+          </button>
+          <button
+            onClick={() => quickSort("vendidas")}
+            className={`border-l border-white/10 px-3.5 py-2.5 text-sm font-semibold transition ${
+              sortKey === "vendidas" ? "bg-teal-500/15 text-teal-200" : "text-zinc-400 hover:bg-white/5"
+            }`}
+          >
+            Más vendidos
+          </button>
+        </div>
+
         <button
           onClick={() => setSoloReponer((v) => !v)}
           className={`rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition ${
@@ -135,39 +161,35 @@ export default function ReposicionTable({ rows, meses }: { rows: ReposRow[]; mes
       </div>
 
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
+          <colgroup>
+            <col className="w-[110px]" />
+            <col />
+            <col className="w-[110px]" />
+            <col className="w-[120px]" />
+            <col className="w-[130px]" />
+          </colgroup>
           <thead className="border-b border-white/10 bg-white/[0.03]">
             <tr>
               {th("Código", "codigo")}
               {th("Título", "titulo")}
               {th("Vendidas", "vendidas", true)}
               {th("Stock disp.", "stock", true)}
-              <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-teal-300">
-                <span
-                  className="cursor-pointer select-none"
-                  onClick={() => toggleSort("sugerida")}
-                >
-                  Reponer ({meses}m){sortKey === "sugerida" && <span className="ml-1">{asc ? "▲" : "▼"}</span>}
-                </span>
-              </th>
+              {th(`Reponer (${meses}m)`, "sugerida", true, true)}
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {filtered.map((r) => (
               <tr key={r.codigo} className="transition hover:bg-white/[0.03]">
-                <td className="px-4 py-2.5 font-mono font-medium text-zinc-100">{r.codigo}</td>
-                <td className="max-w-[360px] truncate px-4 py-2.5 text-zinc-300" title={r.titulo ?? ""}>
+                <td className="px-4 py-3 font-mono font-medium text-zinc-100">{r.codigo}</td>
+                <td className="truncate px-4 py-3 text-zinc-300" title={r.titulo ?? ""}>
                   {r.titulo ?? <span className="text-zinc-600">—</span>}
                 </td>
-                <td className="px-4 py-2.5 text-right tabular-nums text-zinc-200">{fmtInt(r.vendidas)}</td>
-                <td className="px-4 py-2.5 text-right tabular-nums">
-                  {r.stock === null ? (
-                    <span className="text-zinc-600">—</span>
-                  ) : (
-                    <span className={r.stock < 0 ? "text-red-400" : "text-zinc-300"}>{fmtInt(r.stock)}</span>
-                  )}
+                <td className="px-4 py-3 text-right tabular-nums text-zinc-200">{fmtInt(r.vendidas)}</td>
+                <td className="px-4 py-3 text-right tabular-nums text-zinc-300">
+                  {r.stock === null ? <span className="text-zinc-600">—</span> : fmtInt(r.stock)}
                 </td>
-                <td className="px-4 py-2.5 text-right font-bold tabular-nums">
+                <td className="px-4 py-3 text-right font-bold tabular-nums">
                   {r.sugerida > 0 ? (
                     <span className="text-teal-300">{fmtInt(r.sugerida)}</span>
                   ) : (
@@ -186,12 +208,12 @@ export default function ReposicionTable({ rows, meses }: { rows: ReposRow[]; mes
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-white/10 bg-white/[0.03] font-semibold text-white">
-              <td className="px-4 py-3" colSpan={2}>
+              <td className="px-4 py-3.5" colSpan={2}>
                 {fmtInt(totals.items)} códigos
               </td>
-              <td className="px-4 py-3 text-right tabular-nums">{fmtInt(totals.vendidas)}</td>
-              <td className="px-4 py-3 text-right text-zinc-500">Total →</td>
-              <td className="px-4 py-3 text-right tabular-nums text-teal-300">{fmtInt(totals.reponer)}</td>
+              <td className="px-4 py-3.5 text-right tabular-nums">{fmtInt(totals.vendidas)}</td>
+              <td className="px-4 py-3.5 text-right text-xs uppercase tracking-wide text-zinc-500">Total</td>
+              <td className="px-4 py-3.5 text-right tabular-nums text-teal-300">{fmtInt(totals.reponer)}</td>
             </tr>
           </tfoot>
         </table>
