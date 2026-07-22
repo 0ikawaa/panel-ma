@@ -10,7 +10,6 @@ export const MODULES: ModuleDef[] = [
   { key: "inicio", label: "Inicio", path: "/" },
   { key: "embarques", label: "Importaciones", path: "/arribos" },
   { key: "reposicion", label: "Reposición", path: "/reposicion" },
-  { key: "buscar", label: "Buscar SKU", path: "/buscar" },
   { key: "admin", label: "Administración", path: "/admin" },
 ];
 
@@ -19,9 +18,9 @@ export const ALL_MODULES = MODULES.map((m) => m.key);
 /** Devuelve la clave de módulo que protege una ruta, o null si es libre. */
 export function moduleForPath(pathname: string): string | null {
   if (pathname === "/") return "inicio";
-  if (pathname.startsWith("/arribos")) return "embarques";
+  // Buscar SKU es parte de Importaciones (Embarques).
+  if (pathname.startsWith("/arribos") || pathname.startsWith("/buscar")) return "embarques";
   if (pathname.startsWith("/reposicion")) return "reposicion";
-  if (pathname.startsWith("/buscar")) return "buscar";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/api/admin")) return "admin";
   if (pathname.startsWith("/api/reposicion")) return "reposicion";

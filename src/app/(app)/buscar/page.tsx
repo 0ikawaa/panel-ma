@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { fmtCBM, fmtDate, fmtUSD } from "@/lib/format";
 import { cbmPorUnidad } from "@/lib/cost";
 import type { DetalleLinea } from "@/components/ProductTable";
+import EmbarquesTabs from "@/components/EmbarquesTabs";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,11 @@ export default async function BuscarPage({
 }) {
   const { q: rawQ } = await searchParams;
   const q = (rawQ ?? "").trim();
+
+  const [enCamino, recibidos] = await Promise.all([
+    prisma.container.count({ where: { receivedAt: null } }),
+    prisma.container.count({ where: { receivedAt: { not: null } } }),
+  ]);
 
   let resultados: Resultado[] = [];
 
@@ -80,12 +86,13 @@ export default async function BuscarPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-white">Buscar SKU</h1>
+        <h1 className="text-2xl font-bold text-white">Importaciones</h1>
         <p className="mt-1 text-sm text-zinc-400">
-          Ingresá el código del producto para ver su precio en China, el CBM
-          unitario y el próximo arribo.
+          Buscá un código para ver su precio en China, el CBM unitario y el próximo arribo.
         </p>
       </div>
+
+      <EmbarquesTabs active="buscar" enCamino={enCamino} recibidos={recibidos} />
 
       <form method="get" className="flex gap-2">
         <div className="relative flex-1">

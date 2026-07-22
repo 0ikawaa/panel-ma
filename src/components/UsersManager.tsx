@@ -58,7 +58,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: User[] })
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
-  const [newModules, setNewModules] = useState<string[]>(["embarques", "buscar"]);
+  const [newModules, setNewModules] = useState<string[]>(["embarques"]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,7 +90,7 @@ export default function UsersManager({ initialUsers }: { initialUsers: User[] })
         setUsername("");
         setName("");
         setPassword("");
-        setNewModules(["embarques", "buscar"]);
+        setNewModules(["embarques"]);
       }
     } finally {
       setCreating(false);

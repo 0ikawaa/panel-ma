@@ -5,9 +5,9 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   { href: "/", module: "inicio", label: "Inicio" },
-  { href: "/arribos", module: "embarques", label: "Importaciones" },
+  { href: "/arribos", module: "embarques", label: "Embarques" },
+  { href: "/arribos/calculadora", module: "embarques", label: "Calculadora" },
   { href: "/reposicion", module: "reposicion", label: "Reposición" },
-  { href: "/buscar", module: "buscar", label: "Buscar SKU" },
   { href: "/admin", module: "admin", label: "Admin" },
 ];
 
@@ -19,8 +19,14 @@ export default function MobileNav({
   isAdmin: boolean;
 }) {
   const pathname = usePathname();
-  const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const isCalc = pathname.startsWith("/arribos/calculadora");
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    if (href === "/arribos")
+      return (pathname.startsWith("/arribos") && !isCalc) || pathname.startsWith("/buscar");
+    if (href === "/arribos/calculadora") return isCalc;
+    return pathname.startsWith(href);
+  };
 
   const items = NAV.filter((n) => isAdmin || modules.includes(n.module));
 
