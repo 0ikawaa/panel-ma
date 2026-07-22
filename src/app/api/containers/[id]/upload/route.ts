@@ -3,10 +3,13 @@ import { del } from "@vercel/blob";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseExcel } from "@/lib/excel";
+import { buildPreviewReport, validateParse } from "@/lib/validateParse";
 import { uploadDataUrlPhotos, deleteBlobPhotos } from "@/lib/photos";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+type Action = "preview" | "commit" | "cancel";
 
 // Descarga el blob reintentando: recién subido, el CDN puede tardar un
 // instante en servirlo y devolver 404/403 momentáneamente.
@@ -22,7 +25,11 @@ async function downloadBlob(url: string, attempts = 7): Promise<Buffer> {
   throw new Error(`Blob respondió ${lastStatus}`);
 }
 
-// POST /api/containers/:id/upload  (JSON: { blobUrl })
+// POST /api/containers/:id/upload
+//   body: { blobUrl, action }
+//   - "preview": lee y valida el Excel SIN guardar; devuelve el informe.
+//   - "commit":  re-valida y, si está OK, guarda los productos.
+//   - "cancel":  descarta el Excel temporal del Blob.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -35,9 +42,13 @@ export async function POST(
   }
 
   let blobUrl: string | undefined;
+  let action: Action = "commit";
   try {
-    const body = (await req.json()) as { blobUrl?: string };
+    const body = (await req.json()) as { blobUrl?: string; action?: Action };
     blobUrl = body.blobUrl;
+    if (body.action === "preview" || body.action === "commit" || body.action === "cancel") {
+      action = body.action;
+    }
   } catch {
     return NextResponse.json({ error: "Solicitud inválida" }, { status: 400 });
   }
@@ -56,6 +67,14 @@ export async function POST(
     return NextResponse.json({ error: "Origen de archivo no permitido" }, { status: 400 });
   }
 
+  // Cancelar: solo borrar el archivo temporal.
+  if (action === "cancel") {
+    await del(blobUrl).catch(() => {});
+    return NextResponse.json({ ok: true });
+  }
+
+  const fileName = decodeURIComponent(blobUrl.split("/").pop() ?? "excel");
+
   let buffer: Buffer;
   try {
     buffer = await downloadBlob(blobUrl);
@@ -72,18 +91,35 @@ export async function POST(
     result = await parseExcel(buffer);
   } catch (e) {
     console.error("Error al parsear Excel:", e);
-    return NextResponse.json(
-      { error: "No se pudo procesar el Excel. Verificá el formato." },
-      { status: 500 },
-    );
-  } finally {
-    // Borrar el archivo temporal del Blob (no bloqueamos si falla).
+    // Archivo ilegible: descartamos el temporal en cualquier acción.
     del(blobUrl).catch(() => {});
+    return NextResponse.json(
+      {
+        error:
+          "No se pudo leer el Excel. Puede estar dañado, protegido con contraseña o no ser un .xlsx válido.",
+      },
+      { status: 422 },
+    );
   }
 
-  if (result.items.length === 0) {
+  const report = buildPreviewReport(result);
+
+  // --- PREVIEW: no guardamos ni borramos (el blob se reusa al confirmar). ---
+  if (action === "preview") {
+    return NextResponse.json({ preview: true, fileName, ...report });
+  }
+
+  // --- COMMIT: re-validar siempre antes de tocar la base. ---
+  const validation = validateParse(result);
+  if (!validation.ok) {
+    // Bloqueado: no escribimos nada y descartamos el temporal.
+    del(blobUrl).catch(() => {});
     return NextResponse.json(
-      { error: "No se detectaron ítems con datos en el Excel." },
+      {
+        error: "El embarque no se guardó porque la lectura tiene problemas.",
+        blocking: validation.blocking,
+        warnings: validation.warnings,
+      },
       { status: 422 },
     );
   }
@@ -139,7 +175,8 @@ export async function POST(
     );
   }
 
-  // Guardado OK: borrar de Blob las fotos del Excel anterior (best-effort).
+  // Guardado OK: borrar el Excel temporal y las fotos del Excel anterior.
+  del(blobUrl).catch(() => {});
   await deleteBlobPhotos(oldPhotos);
 
   return NextResponse.json({
@@ -147,6 +184,7 @@ export async function POST(
     totalRows: result.totalItems,
     photosFound: result.photosFound,
     columnsDetected: result.columnsDetected,
-    fileName: blobUrl.split("/").pop() ?? "excel",
+    warnings: validation.warnings,
+    fileName,
   });
 }
