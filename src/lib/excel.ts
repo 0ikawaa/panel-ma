@@ -106,13 +106,27 @@ function resolveZipPath(baseDir: string, target: string): string {
   return stack.join("/");
 }
 
-/** Divide un valor de código en sus partes (por "/" y salto de línea). */
+/** Valores que en el Excel significan "sin código" (no identifican un producto).
+ *  Se descartan para que productos distintos no se fusionen bajo un código falso. */
+const PLACEHOLDER_CODES = new Set([
+  "sin codigo", "sincodigo", "s codigo", "s/c", "sc",
+  "na", "n/a", "nan", "null", "-", "--", "—", "x", "xx", "xxx", "?", "tbd",
+]);
+
+function isPlaceholderCode(code: string): boolean {
+  return PLACEHOLDER_CODES.has(norm(code));
+}
+
+/** Divide un valor de código en sus partes (por "/" y salto de línea).
+ *  Descarta placeholders como "SIN CODIGO", "NA" o "-". */
 function splitCodes(raw: unknown): string[] {
-  const first = String(raw ?? "").split("\n")[0]; // ignora notas debajo del código
+  const first = String(raw ?? "").split("\n")[0].trim(); // ignora notas debajo del código
+  if (!first || isPlaceholderCode(first)) return [];
   return first
     .split("/")
     .map((c) => c.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((c) => !isPlaceholderCode(c));
 }
 
 /** Código base: parte antes del primer guion. "48108-BEI-39" -> "48108". */
@@ -419,20 +433,17 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
   const lines: RawLine[] = [];
   let containerTotal: number | null = null;
 
+  // Etiquetas que marcan el cierre de la tabla (total, pago, depósito…).
+  const isSummaryLabel = (s: string): boolean =>
+    /(subtotal|total|deposit|balance|payment|deposito|saldo)/.test(s);
+
   for (let r = headerRow + 1; r < matrix.length; r++) {
     const row = matrix[r] ?? [];
 
-    // Fila de "TOTAL" / "Deposit": marca el fin de la tabla de productos.
-    // Todo lo que sigue son notas, condiciones de pago, datos bancarios, etc.
     const qCell = get(row, "quantity");
     const codeCell = get(row, "codigo");
     const qLabel = typeof qCell === "string" ? norm(qCell) : "";
     const codeLabel = typeof codeCell === "string" ? norm(codeCell) : "";
-    if (qLabel.includes("total") || codeLabel.includes("total")) {
-      const amt = parseNumber(get(row, "amount"));
-      if (amt !== null && containerTotal === null) containerTotal = amt;
-      break; // fin de la tabla de productos
-    }
 
     // Campos numéricos del producto.
     const precioChina = parseNumber(get(row, "precioChina"));
@@ -441,42 +452,60 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
     const cbmTotal = parseNumber(get(row, "cbmTotal"));
     const cbmUnitario = parseNumber(get(row, "cbmUnitario"));
     const cantidadPorCaja = parseInteger(get(row, "cantidadPorCaja"));
-
     const codes = splitCodes(get(row, "codigo"));
 
-    // Es una fila de producto si tiene código o algún dato numérico real.
-    // (Muchos proveedores dejan el código vacío e identifican por descripción.)
-    const tieneDatos =
-      precioChina !== null ||
-      monto !== null ||
-      unidades !== null ||
-      cbmTotal !== null ||
-      cbmUnitario !== null;
-    if (codes.length === 0 && !tieneDatos) continue; // fila vacía o nota
+    // Fila con etiqueta de cierre ("TOTAL", "Deposit", "Balance", "Payment"…):
+    // fin de la tabla. Lo que sigue son totales, pagos, notas y datos bancarios.
+    if (isSummaryLabel(qLabel) || isSummaryLabel(codeLabel)) {
+      if (
+        containerTotal === null &&
+        monto !== null &&
+        (qLabel.includes("total") || codeLabel.includes("total"))
+      ) {
+        containerTotal = monto;
+      }
+      break;
+    }
 
-    lines.push({
-      r,
-      codes,
-      unidades,
-      monto,
-      cbmTotal,
-      cbmUnitario,
-      precioChina,
-      cantidadPorCaja,
-      unidad: (() => {
-        const u = get(row, "unit");
-        return u === null || u === undefined || String(u).trim() === "" ? null : String(u).trim();
-      })(),
-      remark: (() => {
-        const rm = get(row, "remark");
-        return rm === null || rm === undefined || String(rm).trim() === "" ? null : String(rm).trim();
-      })(),
-      descripcion: (() => {
-        const d = get(row, "descripcion");
-        return d === null || d === undefined || String(d).trim() === "" ? null : String(d).trim();
-      })(),
-      photo: imagesByRow.get(r) ?? null,
-    });
+    // Un producto real SIEMPRE tiene código propio o una cantidad numérica.
+    // (Los "SIN CODIGO" quedan sin código pero conservan su cantidad.)
+    const hasRealCode = codes.length > 0;
+    const hasQty = unidades !== null;
+
+    if (hasRealCode || hasQty) {
+      lines.push({
+        r,
+        codes,
+        unidades,
+        monto,
+        cbmTotal,
+        cbmUnitario,
+        precioChina,
+        cantidadPorCaja,
+        unidad: (() => {
+          const u = get(row, "unit");
+          return u === null || u === undefined || String(u).trim() === "" ? null : String(u).trim();
+        })(),
+        remark: (() => {
+          const rm = get(row, "remark");
+          return rm === null || rm === undefined || String(rm).trim() === "" ? null : String(rm).trim();
+        })(),
+        descripcion: (() => {
+          const d = get(row, "descripcion");
+          return d === null || d === undefined || String(d).trim() === "" ? null : String(d).trim();
+        })(),
+        photo: imagesByRow.get(r) ?? null,
+      });
+      continue;
+    }
+
+    // No es un producto. Si ya venían productos y esta fila trae importe o CBM,
+    // es la zona de totales/depósitos SIN etiqueta (ej. una fila con solo el CBM
+    // y el AMOUNT sumados): cerramos la tabla acá para no contarla como producto.
+    if (lines.length > 0 && (monto !== null || cbmTotal !== null || cbmUnitario !== null)) {
+      break;
+    }
+    // Si no, es una fila vacía o una nota suelta: la saltamos y seguimos.
   }
 
   // 2) Agrupar: por celda de foto combinada, o por código base.
@@ -556,6 +585,20 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
         remark: l.remark,
       })),
     });
+  }
+
+  // Si no hubo una fila "TOTAL" explícita (estos proveedores no la ponen), el
+  // precio del contenedor es la suma de los importes de la mercadería.
+  if (containerTotal === null) {
+    let s = 0;
+    let any = false;
+    for (const it of items) {
+      if (it.montoTotal !== null) {
+        s += it.montoTotal;
+        any = true;
+      }
+    }
+    containerTotal = any ? +s.toFixed(2) : null;
   }
 
   return {

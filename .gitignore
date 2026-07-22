@@ -53,3 +53,6 @@ next-env.d.ts
 /_reprocess.ts
 /_headers.ts
 /_analyze.ts
+
+# Excels reales de prueba (datos de proveedores, no subir)
+/fixtures/
