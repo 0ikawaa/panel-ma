@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { fmtCBM, fmtInt, fmtUSD } from "@/lib/format";
+import { landedCost, INCIDENCIA, IVA } from "@/lib/cost";
 
 export interface DetalleLinea {
   codigos: string[];
@@ -18,6 +19,7 @@ export interface ProductRow {
   photo: string | null;
   codigo: string | null;
   precioChina: number | null;
+  cbmUnitario: number | null;
   unidades: number | null;
   montoTotal: number | null;
   unidad: string | null;
@@ -33,7 +35,13 @@ function hasDetail(p: ProductRow): boolean {
   return d.length > 1 || !!p.remark || (d[0]?.codigos?.length ?? 0) > 1;
 }
 
-export default function ProductTable({ products }: { products: ProductRow[] }) {
+export default function ProductTable({
+  products,
+  freightCost,
+}: {
+  products: ProductRow[];
+  freightCost: number | null;
+}) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("rowIndex");
@@ -92,7 +100,7 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
     >
       <span className="inline-flex items-center gap-1">
         {label}
-        {sortKey === k && <span className="text-indigo-400">{asc ? "▲" : "▼"}</span>}
+        {sortKey === k && <span className="text-teal-400">{asc ? "▲" : "▼"}</span>}
       </span>
     </th>
   );
@@ -100,7 +108,7 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
   return (
     <>
       <div className="card overflow-x-auto">
-        <table className="w-full min-w-[760px] border-collapse text-sm">
+        <table className="w-full min-w-[860px] border-collapse text-sm">
           <thead className="border-b border-white/10 bg-white/[0.03]">
             <tr>
               <th className="w-8 px-2 py-3" />
@@ -112,12 +120,16 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
               <Header label="Precio unit." k="precioChina" right />
               <Header label="CBM total" k="cbmTotal" right />
               <Header label="Precio lote" k="montoTotal" right />
+              <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-teal-300">
+                Costo final /u
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
             {sorted.map((p) => {
               const expandable = hasDetail(p);
               const isOpen = expanded.has(p.id);
+              const lc = landedCost(p.precioChina, p.cbmUnitario, freightCost);
               return (
                 <Fragment key={p.id}>
                   <tr
@@ -167,7 +179,7 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
                     <td className="px-4 py-2.5 font-medium text-zinc-100">
                       {p.codigo ?? <span className="text-zinc-600">—</span>}
                       {expandable && (
-                        <span className="ml-2 rounded-full bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-300">
+                        <span className="ml-2 rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300">
                           detalle
                         </span>
                       )}
@@ -182,16 +194,23 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
                     <td className="px-4 py-2.5 text-right tabular-nums text-zinc-300">
                       {fmtCBM(p.cbmTotal)}
                     </td>
-                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-emerald-300">
+                    <td className="px-4 py-2.5 text-right font-semibold tabular-nums text-zinc-200">
                       {fmtUSD(p.montoTotal)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-bold tabular-nums text-teal-300">
+                      {lc ? (
+                        fmtUSD(lc.final)
+                      ) : (
+                        <span className="font-normal text-zinc-600">—</span>
+                      )}
                     </td>
                   </tr>
 
                   {isOpen && expandable && (
                     <tr className="bg-black/20">
                       <td />
-                      <td colSpan={6} className="px-4 pb-4 pt-1">
-                        <DetallePanel p={p} />
+                      <td colSpan={7} className="px-4 pb-4 pt-1">
+                        <DetallePanel p={p} lc={lc} />
                       </td>
                     </tr>
                   )}
@@ -207,8 +226,9 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
               </td>
               <td className="px-4 py-3 text-right tabular-nums">{fmtInt(totals.unidades)}</td>
               <td className="px-4 py-3 text-right text-zinc-500">Total →</td>
-              <td className="px-4 py-3 text-right tabular-nums text-indigo-400">{fmtCBM(totals.cbmTotal)}</td>
-              <td className="px-4 py-3 text-right tabular-nums text-emerald-300">{fmtUSD(totals.monto)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-teal-400">{fmtCBM(totals.cbmTotal)}</td>
+              <td className="px-4 py-3 text-right tabular-nums text-zinc-200">{fmtUSD(totals.monto)}</td>
+              <td className="px-4 py-3" />
             </tr>
           </tfoot>
         </table>
@@ -239,45 +259,72 @@ export default function ProductTable({ products }: { products: ProductRow[] }) {
   );
 }
 
-function DetallePanel({ p }: { p: ProductRow }) {
+function DetallePanel({
+  p,
+  lc,
+}: {
+  p: ProductRow;
+  lc: ReturnType<typeof landedCost>;
+}) {
   const lineas = p.detalle ?? [];
   return (
-    <div className="animate-in rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-indigo-300">
-        Detalle por talle / variante
-      </p>
-      <div className="space-y-3">
-        {lineas.map((l, i) => (
-          <div key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <div className="flex flex-wrap gap-1.5">
-                {l.codigos.map((c, j) => (
-                  <span
-                    key={j}
-                    className="rounded-md bg-indigo-500/15 px-2 py-0.5 text-xs font-medium text-indigo-200"
-                  >
-                    {c}
-                  </span>
-                ))}
-              </div>
-              <div className="ml-auto flex items-center gap-4 text-xs text-zinc-400">
-                {l.unidades !== null && (
-                  <span>
-                    <span className="font-semibold text-white">{fmtInt(l.unidades)}</span> u.
-                  </span>
-                )}
-                {l.monto !== null && (
-                  <span className="text-emerald-300">{fmtUSD(l.monto)}</span>
-                )}
-              </div>
-            </div>
-            {l.remark && (
-              <p className="mt-2 whitespace-pre-line border-t border-white/5 pt-2 text-xs leading-relaxed text-zinc-300">
-                {l.remark}
-              </p>
-            )}
+    <div className="animate-in space-y-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+      {lc && (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-teal-300">
+            Costo final por unidad (nacionalizado, IVA inc.)
+          </p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-300">
+            <span>FOB {fmtUSD(p.precioChina)}</span>
+            <span className="text-zinc-600">+</span>
+            <span>flete {fmtUSD(lc.fleteUnitario)}</span>
+            <span className="text-zinc-600">→</span>
+            <span>{fmtUSD(lc.base)}</span>
+            <span className="text-zinc-600">×{INCIDENCIA} (nac.)</span>
+            <span className="text-zinc-600">×{IVA} (IVA)</span>
+            <span className="text-zinc-600">=</span>
+            <span className="rounded-md bg-teal-500/15 px-2 py-0.5 font-bold text-teal-200">
+              {fmtUSD(lc.final)}
+            </span>
           </div>
-        ))}
+        </div>
+      )}
+
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+          Detalle por talle / variante
+        </p>
+        <div className="space-y-3">
+          {lineas.map((l, i) => (
+            <div key={i} className="rounded-lg border border-white/5 bg-white/[0.02] p-3">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <div className="flex flex-wrap gap-1.5">
+                  {l.codigos.map((c, j) => (
+                    <span
+                      key={j}
+                      className="rounded-md bg-teal-500/15 px-2 py-0.5 text-xs font-medium text-teal-200"
+                    >
+                      {c}
+                    </span>
+                  ))}
+                </div>
+                <div className="ml-auto flex items-center gap-4 text-xs text-zinc-400">
+                  {l.unidades !== null && (
+                    <span>
+                      <span className="font-semibold text-white">{fmtInt(l.unidades)}</span> u.
+                    </span>
+                  )}
+                  {l.monto !== null && <span className="text-zinc-300">{fmtUSD(l.monto)}</span>}
+                </div>
+              </div>
+              {l.remark && (
+                <p className="mt-2 whitespace-pre-line border-t border-white/5 pt-2 text-xs leading-relaxed text-zinc-300">
+                  {l.remark}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

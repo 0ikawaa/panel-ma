@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import {
-  AUTH_COOKIE,
-  checkCredentials,
-  createSessionToken,
-  SESSION_MAX_AGE,
-} from "@/lib/auth";
+import { AUTH_COOKIE, createSessionToken, SESSION_MAX_AGE } from "@/lib/auth";
+import { authenticate } from "@/lib/users";
+
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   let body: { user?: string; password?: string };
@@ -17,14 +15,15 @@ export async function POST(req: Request) {
   const user = (body.user ?? "").trim();
   const password = body.password ?? "";
 
-  if (!checkCredentials(user, password)) {
+  const session = await authenticate(user, password);
+  if (!session) {
     return NextResponse.json(
       { error: "Usuario o contraseña incorrectos" },
       { status: 401 },
     );
   }
 
-  const token = await createSessionToken(user);
+  const token = await createSessionToken(session);
   const res = NextResponse.json({ ok: true });
   res.cookies.set(AUTH_COOKIE, token, {
     httpOnly: true,

@@ -9,6 +9,7 @@ export default function NewContainerButton() {
   const [name, setName] = useState("");
   const [supplier, setSupplier] = useState("");
   const [eta, setEta] = useState("");
+  const [freight, setFreight] = useState("");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,6 +18,7 @@ export default function NewContainerButton() {
     setName("");
     setSupplier("");
     setEta("");
+    setFreight("");
     setNotes("");
     setError(null);
   }
@@ -29,7 +31,7 @@ export default function NewContainerButton() {
       const res = await fetch("/api/containers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, supplier, eta, notes }),
+        body: JSON.stringify({ name, supplier, eta, notes, freightCost: freight }),
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -110,6 +112,20 @@ export default function NewContainerButton() {
                     className="field"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium text-zinc-300">
+                  Costo de flete (US$)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={freight}
+                  onChange={(e) => setFreight(e.target.value)}
+                  placeholder="Opcional · para el costo final por producto"
+                  className="field"
+                />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-300">

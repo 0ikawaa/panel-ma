@@ -4,15 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV = [
-  { href: "/", label: "Inicio" },
-  { href: "/arribos", label: "Embarques" },
-  { href: "/buscar", label: "Buscar SKU" },
+  { href: "/", module: "inicio", label: "Inicio" },
+  { href: "/arribos", module: "embarques", label: "Embarques" },
+  { href: "/buscar", module: "buscar", label: "Buscar SKU" },
+  { href: "/admin", module: "admin", label: "Admin" },
 ];
 
-export default function MobileNav() {
+export default function MobileNav({
+  modules,
+  isAdmin,
+}: {
+  modules: string[];
+  isAdmin: boolean;
+}) {
   const pathname = usePathname();
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  const items = NAV.filter((n) => isAdmin || modules.includes(n.module));
 
   return (
     <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-white/10 bg-black/40 px-4 py-3 backdrop-blur-xl md:hidden">
@@ -23,7 +32,7 @@ export default function MobileNav() {
         className="h-6 w-auto shrink-0 object-contain"
       />
       <nav className="flex flex-1 gap-1 overflow-x-auto">
-        {NAV.map((item) => (
+        {items.map((item) => (
           <Link
             key={item.href}
             href={item.href}

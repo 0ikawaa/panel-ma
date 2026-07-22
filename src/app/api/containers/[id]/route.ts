@@ -30,6 +30,11 @@ export async function PATCH(
   if ("eta" in body) data.eta = body.eta ? new Date(body.eta) : null;
   if ("notes" in body) data.notes = body.notes?.trim() || null;
   if ("received" in body) data.receivedAt = body.received ? new Date() : null;
+  if ("freightCost" in body) {
+    const f = body.freightCost;
+    data.freightCost =
+      f === null || f === "" || isNaN(Number(f)) ? null : Number(f);
+  }
 
   const container = await prisma.container.update({ where: { id }, data });
   return NextResponse.json(container);

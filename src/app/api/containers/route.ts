@@ -31,7 +31,13 @@ export async function GET() {
 
 // POST /api/containers  -> crear
 export async function POST(req: Request) {
-  let body: { name?: string; supplier?: string; eta?: string; notes?: string };
+  let body: {
+    name?: string;
+    supplier?: string;
+    eta?: string;
+    notes?: string;
+    freightCost?: number | string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -46,12 +52,18 @@ export async function POST(req: Request) {
     );
   }
 
+  const freight =
+    body.freightCost != null && String(body.freightCost) !== ""
+      ? Number(body.freightCost)
+      : null;
+
   const container = await prisma.container.create({
     data: {
       name,
       supplier: body.supplier?.trim() || null,
       eta: body.eta ? new Date(body.eta) : null,
       notes: body.notes?.trim() || null,
+      freightCost: freight != null && isFinite(freight) ? freight : null,
     },
   });
 
