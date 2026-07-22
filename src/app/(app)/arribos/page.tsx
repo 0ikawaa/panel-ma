@@ -2,11 +2,12 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import NewContainerButton from "@/components/NewContainerButton";
+import EmbarquesTabs from "@/components/EmbarquesTabs";
 
 export const dynamic = "force-dynamic";
 
 export default async function ArribosPage() {
-  const [containers, stats] = await Promise.all([
+  const [containers, stats, recibidosCount] = await Promise.all([
     prisma.container.findMany({
       where: { receivedAt: null },
       orderBy: [{ eta: "asc" }, { createdAt: "desc" }],
@@ -16,6 +17,7 @@ export default async function ArribosPage() {
       _count: { _all: true },
       _sum: { cbmTotal: true },
     }),
+    prisma.container.count({ where: { receivedAt: { not: null } } }),
   ]);
 
   const statMap = new Map(
@@ -34,17 +36,11 @@ export default async function ArribosPage() {
         <NewContainerButton />
       </div>
 
-      <div className="flex gap-2">
-        <span className="brand-gradient rounded-lg px-3.5 py-1.5 text-sm font-semibold text-white">
-          En camino
-        </span>
-        <Link
-          href="/arribos/recibidos"
-          className="rounded-lg px-3.5 py-1.5 text-sm font-semibold text-zinc-400 transition hover:bg-white/5 hover:text-white"
-        >
-          Recibidos
-        </Link>
-      </div>
+      <EmbarquesTabs
+        active="camino"
+        enCamino={containers.length}
+        recibidos={recibidosCount}
+      />
 
       {containers.length === 0 ? (
         <div className="card flex flex-col items-center border-dashed px-6 py-16 text-center">

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import EmbarquesTabs from "@/components/EmbarquesTabs";
 
 export const dynamic = "force-dynamic";
 
 export default async function RecibidosPage() {
-  const [containers, stats] = await Promise.all([
+  const [containers, stats, enCaminoCount] = await Promise.all([
     prisma.container.findMany({
       where: { receivedAt: { not: null } },
       orderBy: { receivedAt: "desc" },
@@ -15,6 +16,7 @@ export default async function RecibidosPage() {
       _count: { _all: true },
       _sum: { cbmTotal: true },
     }),
+    prisma.container.count({ where: { receivedAt: null } }),
   ]);
 
   const statMap = new Map(
@@ -30,17 +32,11 @@ export default async function RecibidosPage() {
         </p>
       </div>
 
-      <div className="flex gap-2">
-        <Link
-          href="/arribos"
-          className="rounded-lg px-3.5 py-1.5 text-sm font-semibold text-zinc-400 transition hover:bg-white/5 hover:text-white"
-        >
-          En camino
-        </Link>
-        <span className="rounded-lg bg-emerald-600 px-3.5 py-1.5 text-sm font-semibold text-white">
-          Recibidos
-        </span>
-      </div>
+      <EmbarquesTabs
+        active="recibidos"
+        enCamino={enCaminoCount}
+        recibidos={containers.length}
+      />
 
       {containers.length === 0 ? (
         <div className="card flex flex-col items-center border-dashed px-6 py-16 text-center">
