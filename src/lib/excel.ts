@@ -127,6 +127,7 @@ function baseCode(code: string): string {
 type Field =
   | "foto"
   | "codigo"
+  | "descripcion"
   | "unit"
   | "precioChina"
   | "cantidadPorCaja"
@@ -139,6 +140,7 @@ type Field =
 const FIELDS: Field[] = [
   "foto",
   "codigo",
+  "descripcion",
   "unit",
   "precioChina",
   "cantidadPorCaja",
@@ -161,6 +163,9 @@ function scoreHeader(header: string, field: Field): number {
       // Preferir "MA CODE" sobre otras columnas con "code" (ej. "IHOME CODE").
       if (has("ma code") || has("macode")) return 5;
       if (has("codigo") || has("code") || has("cod ") || h === "cod" || has("sku") || has("item") || has("modelo") || has("model") || has("ref") || has("art")) return 3;
+      return 0;
+    case "descripcion":
+      if (has("descrip") || has("detalle") || has("product name") || has("nombre del producto")) return 4;
       return 0;
     case "unit":
       if (h === "unit" || h === "unidad" || h === "uom" || has("u/m")) return 3;
@@ -371,6 +376,7 @@ interface RawLine {
   cantidadPorCaja: number | null;
   unidad: string | null;
   remark: string | null;
+  descripcion: string | null;
   photo: string | null;
 }
 
@@ -416,25 +422,47 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
   for (let r = headerRow + 1; r < matrix.length; r++) {
     const row = matrix[r] ?? [];
 
-    // ¿Fila de "TOTAL"? (aparece en la columna de cantidad como texto)
+    // Fila de "TOTAL" / "Deposit": marca el fin de la tabla de productos.
+    // Todo lo que sigue son notas, condiciones de pago, datos bancarios, etc.
     const qCell = get(row, "quantity");
-    if (typeof qCell === "string" && norm(qCell).includes("total")) {
+    const codeCell = get(row, "codigo");
+    const qLabel = typeof qCell === "string" ? norm(qCell) : "";
+    const codeLabel = typeof codeCell === "string" ? norm(codeCell) : "";
+    if (qLabel.includes("total") || codeLabel.includes("total")) {
       const amt = parseNumber(get(row, "amount"));
       if (amt !== null && containerTotal === null) containerTotal = amt;
+      break; // fin de la tabla de productos
     }
 
+    // Campos numéricos del producto.
+    const precioChina = parseNumber(get(row, "precioChina"));
+    const monto = parseNumber(get(row, "amount"));
+    const unidades = parseInteger(get(row, "quantity"));
+    const cbmTotal = parseNumber(get(row, "cbmTotal"));
+    const cbmUnitario = parseNumber(get(row, "cbmUnitario"));
+    const cantidadPorCaja = parseInteger(get(row, "cantidadPorCaja"));
+
     const codes = splitCodes(get(row, "codigo"));
-    if (codes.length === 0) continue; // fila sin código = no es producto
+
+    // Es una fila de producto si tiene código o algún dato numérico real.
+    // (Muchos proveedores dejan el código vacío e identifican por descripción.)
+    const tieneDatos =
+      precioChina !== null ||
+      monto !== null ||
+      unidades !== null ||
+      cbmTotal !== null ||
+      cbmUnitario !== null;
+    if (codes.length === 0 && !tieneDatos) continue; // fila vacía o nota
 
     lines.push({
       r,
       codes,
-      unidades: parseInteger(get(row, "quantity")),
-      monto: parseNumber(get(row, "amount")),
-      cbmTotal: parseNumber(get(row, "cbmTotal")),
-      cbmUnitario: parseNumber(get(row, "cbmUnitario")),
-      precioChina: parseNumber(get(row, "precioChina")),
-      cantidadPorCaja: parseInteger(get(row, "cantidadPorCaja")),
+      unidades,
+      monto,
+      cbmTotal,
+      cbmUnitario,
+      precioChina,
+      cantidadPorCaja,
       unidad: (() => {
         const u = get(row, "unit");
         return u === null || u === undefined || String(u).trim() === "" ? null : String(u).trim();
@@ -442,6 +470,10 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
       remark: (() => {
         const rm = get(row, "remark");
         return rm === null || rm === undefined || String(rm).trim() === "" ? null : String(rm).trim();
+      })(),
+      descripcion: (() => {
+        const d = get(row, "descripcion");
+        return d === null || d === undefined || String(d).trim() === "" ? null : String(d).trim();
       })(),
       photo: imagesByRow.get(r) ?? null,
     });
@@ -451,7 +483,9 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
   const groups = new Map<string, RawLine[]>();
   const order: string[] = [];
   for (const ln of lines) {
-    const key = mergeGroupOf(ln.r) ?? `c:${baseCode(ln.codes[0])}`;
+    const key =
+      mergeGroupOf(ln.r) ??
+      (ln.codes.length ? `c:${baseCode(ln.codes[0])}` : `r:${ln.r}`);
     if (!groups.has(key)) {
       groups.set(key, []);
       order.push(key);
@@ -469,8 +503,13 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
     const bases = Array.from(new Set(allCodes.map(baseCode)));
     const distinct = Array.from(new Set(allCodes));
 
+    const descripcion = g.find((l) => l.descripcion)?.descripcion ?? null;
+
     let codigo: string;
-    if (bases.length === 1) {
+    if (bases.length === 0) {
+      // Sin código propio: identificar por la primera línea de la descripción.
+      codigo = descripcion ? descripcion.split("\n")[0].trim().slice(0, 40) : "—";
+    } else if (bases.length === 1) {
       codigo = distinct.length > 1 ? bases[0] : distinct[0];
     } else {
       codigo = `${bases[0]} +${bases.length - 1}`;
@@ -493,6 +532,8 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
     if (photo) photosFound += 1;
 
     const remarks = g.map((l) => l.remark).filter(Boolean) as string[];
+    // Si no hay código, la descripción es la identidad del producto: mostrala completa.
+    if (bases.length === 0 && descripcion) remarks.unshift(descripcion);
 
     items.push({
       rowIndex: i + 1,
