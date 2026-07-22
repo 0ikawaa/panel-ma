@@ -18,11 +18,11 @@ interface UploadResult {
 
 const COL_LABELS: Record<string, string> = {
   foto: "Foto",
-  codigo: "Código",
-  precioChina: "Precio China",
-  cantidadPorCaja: "Cant. por caja",
-  cbmUnitario: "CBM unitario",
+  codigo: "Código (MA Code)",
+  precioChina: "Precio unit. (FOB)",
+  unidades: "Unidades (Quantity)",
   cbmTotal: "CBM total",
+  montoTotal: "Precio lote (Amount)",
 };
 
 export default function UploadExcel({ containerId, hasProducts }: Props) {
@@ -194,7 +194,7 @@ export default function UploadExcel({ containerId, hasProducts }: Props) {
                       ¡Excel cargado con éxito!
                     </p>
                     <p className="text-xs text-emerald-400/80">
-                      {result.totalRows} productos · {result.photosFound} fotos
+                      {result.totalRows} ítems · {result.photosFound} fotos
                       detectadas
                     </p>
                   </div>

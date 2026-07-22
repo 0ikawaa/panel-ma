@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { del } from "@vercel/blob";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { parseExcel } from "@/lib/excel";
 
@@ -14,7 +15,6 @@ async function downloadBlob(url: string, attempts = 7): Promise<Buffer> {
     const res = await fetch(url, { cache: "no-store" });
     if (res.ok) return Buffer.from(await res.arrayBuffer());
     lastStatus = res.status;
-    // Solo reintentamos ante "todavía no disponible" (404/403).
     if (res.status !== 404 && res.status !== 403) break;
     await new Promise((r) => setTimeout(r, 500 * (i + 1)));
   }
@@ -22,7 +22,6 @@ async function downloadBlob(url: string, attempts = 7): Promise<Buffer> {
 }
 
 // POST /api/containers/:id/upload  (JSON: { blobUrl })
-// El navegador ya subió el Excel a Vercel Blob; acá lo descargamos y procesamos.
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -46,7 +45,6 @@ export async function POST(
     return NextResponse.json({ error: "Falta el archivo Excel" }, { status: 400 });
   }
 
-  // Seguridad: solo aceptamos URLs de nuestro almacenamiento de Blob.
   let host: string;
   try {
     host = new URL(blobUrl).hostname;
@@ -57,7 +55,6 @@ export async function POST(
     return NextResponse.json({ error: "Origen de archivo no permitido" }, { status: 400 });
   }
 
-  // Descargar el Excel desde Blob (con reintentos por la propagación del CDN)
   let buffer: Buffer;
   try {
     buffer = await downloadBlob(blobUrl);
@@ -80,43 +77,44 @@ export async function POST(
     );
   } finally {
     // Borrar el archivo temporal del Blob (no bloqueamos si falla).
-    // TEMPORAL: desactivado para poder inspeccionar el archivo mientras
-    // desarrollamos las nuevas funciones (cantidades, códigos, agrupado).
-    void del;
-    // del(blobUrl).catch(() => {});
+    del(blobUrl).catch(() => {});
   }
 
-  if (result.rows.length === 0) {
+  if (result.items.length === 0) {
     return NextResponse.json(
-      { error: "No se detectaron filas con datos en el Excel." },
+      { error: "No se detectaron ítems con datos en el Excel." },
       { status: 422 },
     );
   }
 
-  // Reemplaza los productos existentes del contenedor
   await prisma.$transaction([
     prisma.product.deleteMany({ where: { containerId: id } }),
     prisma.product.createMany({
-      data: result.rows.map((r) => ({
+      data: result.items.map((it) => ({
         containerId: id,
-        rowIndex: r.rowIndex,
-        photo: r.photo,
-        codigo: r.codigo,
-        precioChina: r.precioChina,
-        cantidadPorCaja: r.cantidadPorCaja,
-        cbmUnitario: r.cbmUnitario,
-        cbmTotal: r.cbmTotal,
+        rowIndex: it.rowIndex,
+        photo: it.photo,
+        codigo: it.codigo,
+        precioChina: it.precioChina,
+        cantidadPorCaja: it.cantidadPorCaja,
+        unidades: it.unidades,
+        montoTotal: it.montoTotal,
+        unidad: it.unidad,
+        remark: it.remark,
+        cbmUnitario: it.cbmUnitario,
+        cbmTotal: it.cbmTotal,
+        detalle: it.detalle as unknown as Prisma.InputJsonValue,
       })),
     }),
     prisma.container.update({
       where: { id },
-      data: { updatedAt: new Date() },
+      data: { updatedAt: new Date(), totalPrice: result.containerTotal },
     }),
   ]);
 
   return NextResponse.json({
     ok: true,
-    totalRows: result.totalRows,
+    totalRows: result.totalItems,
     photosFound: result.photosFound,
     columnsDetected: result.columnsDetected,
     fileName: blobUrl.split("/").pop() ?? "excel",

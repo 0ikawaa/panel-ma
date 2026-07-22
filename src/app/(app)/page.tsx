@@ -1,19 +1,19 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtInt } from "@/lib/format";
+import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import NewContainerButton from "@/components/NewContainerButton";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const [containersCount, productAgg, photosCount, containers, stats] =
+  const [containersCount, productAgg, valueAgg, containers, stats] =
     await Promise.all([
       prisma.container.count(),
       prisma.product.aggregate({
         _count: { _all: true },
         _sum: { cbmTotal: true },
       }),
-      prisma.product.count({ where: { NOT: { photo: null } } }),
+      prisma.container.aggregate({ _sum: { totalPrice: true } }),
       prisma.container.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
       prisma.product.groupBy({
         by: ["containerId"],
@@ -34,7 +34,7 @@ export default async function DashboardPage() {
       icon: <path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 0 2-3h14l2 3M9 7v12M15 7v12" />,
     },
     {
-      label: "Productos cargados",
+      label: "Ítems cargados",
       value: fmtInt(productAgg._count._all),
       gradient: "linear-gradient(135deg,#0ea5e9,#06b6d4)",
       icon: <path d="M20 7 12 3 4 7l8 4 8-4ZM4 7v10l8 4 8-4V7M12 11v10" />,
@@ -42,14 +42,14 @@ export default async function DashboardPage() {
     {
       label: "CBM total",
       value: fmtCBM(productAgg._sum.cbmTotal ?? 0),
-      gradient: "linear-gradient(135deg,#10b981,#14b8a6)",
+      gradient: "linear-gradient(135deg,#8b5cf6,#6366f1)",
       icon: <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />,
     },
     {
-      label: "Fotos cargadas",
-      value: fmtInt(photosCount),
-      gradient: "linear-gradient(135deg,#f59e0b,#f97316)",
-      icon: <path d="M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6M8.5 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />,
+      label: "Valor en tránsito",
+      value: fmtUSD(valueAgg._sum.totalPrice ?? 0),
+      gradient: "linear-gradient(135deg,#10b981,#14b8a6)",
+      icon: <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />,
     },
   ];
 
@@ -133,12 +133,12 @@ export default async function DashboardPage() {
                       {fmtDate(c.eta)}
                     </p>
                   </div>
-                  <div className="hidden text-right sm:block">
-                    <p className="text-sm font-semibold text-zinc-200">
-                      {fmtInt(s?.count ?? 0)} prod.
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-emerald-300">
+                      {c.totalPrice != null ? fmtUSD(c.totalPrice) : "—"}
                     </p>
-                    <p className="text-xs text-zinc-500">
-                      {fmtCBM(s?.cbm ?? 0)}
+                    <p className="hidden text-xs text-zinc-500 sm:block">
+                      {fmtInt(s?.count ?? 0)} ítems · {fmtCBM(s?.cbm ?? 0)}
                     </p>
                   </div>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="h-5 w-5 text-zinc-600">

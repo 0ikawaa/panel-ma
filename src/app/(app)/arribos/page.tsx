@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtInt } from "@/lib/format";
+import { fmtCBM, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import NewContainerButton from "@/components/NewContainerButton";
 
 export const dynamic = "force-dynamic";
@@ -77,12 +77,23 @@ export default async function ArribosPage() {
                   {c.supplier && (
                     <p className="mt-0.5 text-sm text-zinc-500">{c.supplier}</p>
                   )}
+
+                  {/* Precio total del contenedor, destacado */}
+                  <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-3">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-emerald-300/80">
+                      Precio del contenedor
+                    </p>
+                    <p className="text-xl font-bold text-emerald-300">
+                      {c.totalPrice != null ? fmtUSD(c.totalPrice) : "—"}
+                    </p>
+                  </div>
+
                   <div className="mt-4 flex items-center gap-4 border-t border-white/10 pt-4">
                     <div>
                       <p className="text-lg font-bold text-white">
                         {fmtInt(s?.count ?? 0)}
                       </p>
-                      <p className="text-xs text-zinc-500">productos</p>
+                      <p className="text-xs text-zinc-500">ítems</p>
                     </div>
                     <div className="ml-auto text-right">
                       <p className="text-lg font-bold text-indigo-400">

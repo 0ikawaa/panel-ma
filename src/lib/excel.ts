@@ -1,20 +1,37 @@
 import JSZip from "jszip";
 import * as XLSX from "xlsx";
 
-export interface ParsedRow {
+/** Una línea original del Excel dentro de un ítem (un talle / variante). */
+export interface DetalleLinea {
+  codigos: string[]; // códigos de esa línea (ej. talles)
+  unidades: number | null; // unidades totales de la línea (Quantity)
+  monto: number | null; // precio de esa línea (Amount)
+  cbmTotal: number | null;
+  precioChina: number | null; // FOB unitario
+  remark: string | null;
+}
+
+/** Un ítem: agrupa una o más líneas del Excel. */
+export interface ParsedItem {
   rowIndex: number;
-  photo: string | null; // data URL (base64)
-  codigo: string | null;
+  photo: string | null;
+  codigo: string; // código a mostrar (base cuando hay varios)
   precioChina: number | null;
   cantidadPorCaja: number | null;
+  unidades: number | null; // Quantity total (suma)
+  montoTotal: number | null; // Amount total (suma)
+  unidad: string | null;
   cbmUnitario: number | null;
-  cbmTotal: number | null;
+  cbmTotal: number | null; // suma
+  remark: string | null;
+  detalle: DetalleLinea[];
 }
 
 export interface ParseResult {
-  rows: ParsedRow[];
+  items: ParsedItem[];
   photosFound: number;
-  totalRows: number;
+  totalItems: number;
+  containerTotal: number | null;
   columnsDetected: Record<string, string | null>;
 }
 
@@ -35,10 +52,8 @@ function parseNumber(v: unknown): number | null {
   if (typeof v === "number") return isFinite(v) ? v : null;
   let s = String(v).trim();
   if (!s) return null;
-  // limpia símbolos de moneda y espacios
   s = s.replace(/[^0-9,.\-]/g, "");
   if (!s) return null;
-  // Si tiene coma y punto: asume punto = miles, coma = decimal (formato ES)
   if (s.includes(",") && s.includes(".")) {
     s = s.replace(/\./g, "").replace(",", ".");
   } else if (s.includes(",")) {
@@ -68,11 +83,10 @@ function extToMime(path: string): string | null {
     case "webp":
       return "image/webp";
     default:
-      return null; // emf/wmf u otros no soportados en <img>
+      return null;
   }
 }
 
-/** Convierte "B2" -> { col: 1, row: 1 } (ambos 0-based). */
 function cellRefToRC(ref: string): { col: number; row: number } | null {
   const m = /^([A-Z]+)(\d+)$/.exec(ref);
   if (!m) return null;
@@ -81,7 +95,6 @@ function cellRefToRC(ref: string): { col: number; row: number } | null {
   return { col: col - 1, row: parseInt(m[2], 10) - 1 };
 }
 
-/** Resuelve una ruta relativa de un .rels respecto a la carpeta base. */
 function resolveZipPath(baseDir: string, target: string): string {
   const parts = (baseDir + "/" + target).split("/");
   const stack: string[] = [];
@@ -93,6 +106,20 @@ function resolveZipPath(baseDir: string, target: string): string {
   return stack.join("/");
 }
 
+/** Divide un valor de código en sus partes (por "/" y salto de línea). */
+function splitCodes(raw: unknown): string[] {
+  const first = String(raw ?? "").split("\n")[0]; // ignora notas debajo del código
+  return first
+    .split("/")
+    .map((c) => c.trim())
+    .filter(Boolean);
+}
+
+/** Código base: parte antes del primer guion. "48108-BEI-39" -> "48108". */
+function baseCode(code: string): string {
+  return code.split("-")[0].trim();
+}
+
 /* ------------------------------------------------------------------ */
 /* Detección de columnas por encabezado                               */
 /* ------------------------------------------------------------------ */
@@ -100,12 +127,28 @@ function resolveZipPath(baseDir: string, target: string): string {
 type Field =
   | "foto"
   | "codigo"
+  | "unit"
   | "precioChina"
   | "cantidadPorCaja"
+  | "quantity"
   | "cbmUnitario"
-  | "cbmTotal";
+  | "cbmTotal"
+  | "amount"
+  | "remark";
 
-/** Puntúa qué tan bien un encabezado corresponde a un campo. */
+const FIELDS: Field[] = [
+  "foto",
+  "codigo",
+  "unit",
+  "precioChina",
+  "cantidadPorCaja",
+  "quantity",
+  "cbmUnitario",
+  "cbmTotal",
+  "amount",
+  "remark",
+];
+
 function scoreHeader(header: string, field: Field): number {
   const h = norm(header);
   if (!h) return 0;
@@ -115,44 +158,58 @@ function scoreHeader(header: string, field: Field): number {
       if (has("foto") || has("imagen") || has("image") || has("photo") || has("picture") || has("pic")) return 3;
       return 0;
     case "codigo":
-      // Preferir la columna "MA CODE" por sobre otras columnas de código
-      // (p. ej. "IHOME CODE") cuando el Excel trae ambas.
+      // Preferir "MA CODE" sobre otras columnas con "code" (ej. "IHOME CODE").
       if (has("ma code") || has("macode")) return 5;
       if (has("codigo") || has("code") || has("cod ") || h === "cod" || has("sku") || has("item") || has("modelo") || has("model") || has("ref") || has("art")) return 3;
       return 0;
+    case "unit":
+      if (h === "unit" || h === "unidad" || h === "uom" || has("u/m")) return 3;
+      return 0;
     case "precioChina":
-      if (has("precio") || has("price") || has("fob") || has("costo") || has("usd") || has("china") || h.includes("$")) {
-        return has("china") ? 4 : 3;
-      }
+      if (has("fob")) return 4;
+      if (has("precio") || has("price") || has("costo") || has("china") || h.includes("$")) return 3;
       return 0;
     case "cantidadPorCaja":
       if (has("caja") || has("carton") || has("ctn") || has("box")) return 4;
-      if (has("cantidad") || has("cant") || has("pcs") || has("qty") || has("unid")) return 3;
+      if (has("pcs/") || has("/ctn") || has("qty/")) return 4;
+      return 0;
+    case "quantity":
+      if (has("quatity") || has("quantity")) return 4; // "QUATITY" (typo en el Excel)
+      if (has("cantidad total") || has("total qty") || has("unidades")) return 3;
       return 0;
     case "cbmUnitario":
       if (has("cbm")) {
-        if (has("unit") || has("unid") || has("u.") || h.endsWith(" u") || has("x unidad") || has("por unidad")) return 4;
         if (has("total") || has("tot")) return 0;
-        return 2; // "cbm" a secas -> probablemente unitario
+        if (has("unit") || has("unid") || has("u.")) return 4;
+        return 2; // "cbm" a secas -> unitario
       }
       return 0;
     case "cbmTotal":
       if (has("cbm") && (has("total") || has("tot"))) return 4;
       if (has("volumen") || has("volume")) return 2;
       return 0;
+    case "amount":
+      if (has("amount") || has("importe") || has("monto")) return 4;
+      return 0;
+    case "remark":
+      if (has("remark") || has("observ") || has("nota") || has("comentario")) return 4;
+      return 0;
   }
 }
 
-/** Dada la matriz de filas, encuentra la fila de encabezado y el mapa columna->campo. */
 function detectColumns(matrix: unknown[][]): {
   headerRow: number;
   map: Partial<Record<Field, number>>;
   headers: Partial<Record<Field, string>>;
 } {
-  const fields: Field[] = ["foto", "codigo", "precioChina", "cantidadPorCaja", "cbmUnitario", "cbmTotal"];
-  let best = { headerRow: 0, score: -1, map: {} as Partial<Record<Field, number>>, headers: {} as Partial<Record<Field, string>> };
+  let best = {
+    headerRow: 0,
+    score: -1,
+    map: {} as Partial<Record<Field, number>>,
+    headers: {} as Partial<Record<Field, string>>,
+  };
 
-  const limit = Math.min(matrix.length, 15); // el encabezado suele estar arriba
+  const limit = Math.min(matrix.length, 20);
   for (let r = 0; r < limit; r++) {
     const row = matrix[r] ?? [];
     const map: Partial<Record<Field, number>> = {};
@@ -160,7 +217,7 @@ function detectColumns(matrix: unknown[][]): {
     const usedCols = new Set<number>();
     let rowScore = 0;
 
-    for (const field of fields) {
+    for (const field of FIELDS) {
       let bestCol = -1;
       let bestColScore = 0;
       for (let c = 0; c < row.length; c++) {
@@ -190,12 +247,10 @@ function detectColumns(matrix: unknown[][]): {
 /* Extracción de imágenes                                             */
 /* ------------------------------------------------------------------ */
 
-/** Devuelve un map: fila (0-based del sheet) -> data URL de la imagen. */
 async function extractImages(zip: JSZip): Promise<Map<number, string>> {
   const byRow = new Map<number, string>();
-
-  // Cache de medios en data URL
   const mediaCache = new Map<string, string | null>();
+
   async function mediaToDataUrl(path: string): Promise<string | null> {
     if (mediaCache.has(path)) return mediaCache.get(path) ?? null;
     const file = zip.file(path);
@@ -214,7 +269,6 @@ async function extractImages(zip: JSZip): Promise<Map<number, string>> {
     return url;
   }
 
-  // Lee un .rels y devuelve map rId -> ruta absoluta en el zip
   async function readRels(relsPath: string, baseDir: string): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     const file = zip.file(relsPath);
@@ -231,7 +285,8 @@ async function extractImages(zip: JSZip): Promise<Map<number, string>> {
     return map;
   }
 
-  /* --- Estrategia 1: imágenes ancladas (drawings estándar) --- */
+  /* Estrategia 1: imágenes ancladas (drawings estándar). Guardamos la fila
+     "from" y, si existe, propagamos por el rango hasta "to" (celda combinada). */
   const drawingPaths = Object.keys(zip.files).filter((p) => /^xl\/drawings\/drawing\d+\.xml$/i.test(p));
   for (const drawingPath of drawingPaths) {
     const xml = await zip.file(drawingPath)!.async("string");
@@ -239,29 +294,31 @@ async function extractImages(zip: JSZip): Promise<Map<number, string>> {
     const relsPath = `${baseDir}/_rels/${drawingPath.substring(drawingPath.lastIndexOf("/") + 1)}.rels`;
     const rels = await readRels(relsPath, baseDir);
 
-    // Cada anchor: capturamos la fila "from" y el r:embed de la imagen
     const anchorRe = /<xdr:(twoCellAnchor|oneCellAnchor)\b[\s\S]*?<\/xdr:\1>/g;
     let a: RegExpExecArray | null;
     while ((a = anchorRe.exec(xml))) {
       const block = a[0];
-      const rowM = /<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/.exec(block);
+      const fromM = /<xdr:from>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/.exec(block);
+      const toM = /<xdr:to>[\s\S]*?<xdr:row>(\d+)<\/xdr:row>/.exec(block);
       const embedM = /<a:blip[^>]*r:embed="([^"]+)"/.exec(block);
-      if (!rowM || !embedM) continue;
-      const row = parseInt(rowM[1], 10); // ya es 0-based
+      if (!fromM || !embedM) continue;
+      const fromRow = parseInt(fromM[1], 10);
+      const toRow = toM ? parseInt(toM[1], 10) : fromRow;
       const mediaPath = rels.get(embedM[1]);
       if (!mediaPath) continue;
       const url = await mediaToDataUrl(mediaPath);
-      if (url && !byRow.has(row)) byRow.set(row, url);
+      if (!url) continue;
+      for (let row = fromRow; row <= toRow; row++) {
+        if (!byRow.has(row)) byRow.set(row, url);
+      }
     }
   }
 
-  /* --- Estrategia 2: imágenes en celda tipo WPS (DISPIMG + cellimages.xml) --- */
+  /* Estrategia 2: imágenes en celda tipo WPS (DISPIMG + cellimages.xml) */
   const cellImagesFile = zip.file("xl/cellimages.xml");
   if (cellImagesFile) {
     const xml = await cellImagesFile.async("string");
     const rels = await readRels("xl/_rels/cellimages.xml.rels", "xl");
-
-    // nombre (ID_xxx) -> ruta de media
     const idToMedia = new Map<string, string>();
     const picRe = /<xdr:pic>[\s\S]*?<\/xdr:pic>/g;
     let p: RegExpExecArray | null;
@@ -273,8 +330,6 @@ async function extractImages(zip: JSZip): Promise<Map<number, string>> {
       const mediaPath = rels.get(embedM[1]);
       if (mediaPath) idToMedia.set(nameM[1], mediaPath);
     }
-
-    // Busca en la primera hoja las celdas con DISPIMG("ID_xxx")
     const sheetPath =
       Object.keys(zip.files).find((p) => /^xl\/worksheets\/sheet1\.xml$/i.test(p)) ??
       Object.keys(zip.files).find((p) => /^xl\/worksheets\/sheet\d+\.xml$/i.test(p));
@@ -305,12 +360,23 @@ async function extractImages(zip: JSZip): Promise<Map<number, string>> {
 /* Función principal                                                  */
 /* ------------------------------------------------------------------ */
 
-export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseResult> {
-  const buf: Buffer = Buffer.isBuffer(buffer)
-    ? buffer
-    : Buffer.from(new Uint8Array(buffer));
+interface RawLine {
+  r: number;
+  codes: string[];
+  unidades: number | null;
+  monto: number | null;
+  cbmTotal: number | null;
+  cbmUnitario: number | null;
+  precioChina: number | null;
+  cantidadPorCaja: number | null;
+  unidad: string | null;
+  remark: string | null;
+  photo: string | null;
+}
 
-  // 1) Datos de las celdas con SheetJS
+export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseResult> {
+  const buf: Buffer = Buffer.isBuffer(buffer) ? buffer : Buffer.from(new Uint8Array(buffer));
+
   const wb = XLSX.read(buf, { type: "buffer" });
   const sheetName = wb.SheetNames[0];
   const sheet = wb.Sheets[sheetName];
@@ -323,74 +389,146 @@ export async function parseExcel(buffer: Buffer | ArrayBuffer): Promise<ParseRes
 
   const { headerRow, map, headers } = detectColumns(matrix);
 
-  // 2) Imágenes incrustadas
   const zip = await JSZip.loadAsync(buf);
   const imagesByRow = await extractImages(zip);
 
-  // 3) Construir filas
-  const rows: ParsedRow[] = [];
-  let photosFound = 0;
-  let order = 0;
+  // Rangos de celdas combinadas sobre la columna de la foto (para agrupar).
+  const fotoCol = map.foto ?? 1;
+  const merges = (sheet["!merges"] ?? []) as {
+    s: { r: number; c: number };
+    e: { r: number; c: number };
+  }[];
+  const mergeRanges = merges
+    .filter((m) => m.s.c <= fotoCol && m.e.c >= fotoCol && m.e.r > m.s.r)
+    .map((m) => [m.s.r, m.e.r] as [number, number]);
+  const mergeGroupOf = (r: number): string | null => {
+    for (const [s, e] of mergeRanges) if (r >= s && r <= e) return `m${s}`;
+    return null;
+  };
+
+  const get = (row: unknown[], f: Field): unknown =>
+    map[f] !== undefined ? row[map[f]!] : null;
+
+  // 1) Leer líneas crudas y detectar el total del contenedor.
+  const lines: RawLine[] = [];
+  let containerTotal: number | null = null;
 
   for (let r = headerRow + 1; r < matrix.length; r++) {
     const row = matrix[r] ?? [];
-    const get = (f: Field): unknown =>
-      map[f] !== undefined ? row[map[f]!] : null;
 
-    const codigo = map.codigo !== undefined ? row[map.codigo] : null;
-    const precioChina = parseNumber(get("precioChina"));
-    const cantidadPorCaja = parseInteger(get("cantidadPorCaja"));
-    let cbmUnitario = parseNumber(get("cbmUnitario"));
-    let cbmTotal = parseNumber(get("cbmTotal"));
-    const photo = imagesByRow.get(r) ?? null;
-
-    // Si falta uno de los CBM pero tenemos el otro y la cantidad, lo calculamos
-    if (cbmTotal === null && cbmUnitario !== null && cantidadPorCaja !== null) {
-      cbmTotal = +(cbmUnitario * cantidadPorCaja).toFixed(6);
-    } else if (cbmUnitario === null && cbmTotal !== null && cantidadPorCaja) {
-      cbmUnitario = +(cbmTotal / cantidadPorCaja).toFixed(6);
+    // ¿Fila de "TOTAL"? (aparece en la columna de cantidad como texto)
+    const qCell = get(row, "quantity");
+    if (typeof qCell === "string" && norm(qCell).includes("total")) {
+      const amt = parseNumber(get(row, "amount"));
+      if (amt !== null && containerTotal === null) containerTotal = amt;
     }
 
-    const codigoStr =
-      codigo === null || codigo === undefined || String(codigo).trim() === ""
-        ? null
-        : String(codigo).trim();
+    const codes = splitCodes(get(row, "codigo"));
+    if (codes.length === 0) continue; // fila sin código = no es producto
 
-    // Una fila es un producto real solo si tiene código, precio, cantidad o
-    // CBM unitario. Así descartamos la fila de "TOTAL" (que trae únicamente el
-    // CBM total y duplicaría la suma) y las imágenes sueltas (solo foto).
-    const hasProductData =
-      codigoStr !== null ||
-      precioChina !== null ||
-      cantidadPorCaja !== null ||
-      cbmUnitario !== null;
-    if (!hasProductData) continue;
+    lines.push({
+      r,
+      codes,
+      unidades: parseInteger(get(row, "quantity")),
+      monto: parseNumber(get(row, "amount")),
+      cbmTotal: parseNumber(get(row, "cbmTotal")),
+      cbmUnitario: parseNumber(get(row, "cbmUnitario")),
+      precioChina: parseNumber(get(row, "precioChina")),
+      cantidadPorCaja: parseInteger(get(row, "cantidadPorCaja")),
+      unidad: (() => {
+        const u = get(row, "unit");
+        return u === null || u === undefined || String(u).trim() === "" ? null : String(u).trim();
+      })(),
+      remark: (() => {
+        const rm = get(row, "remark");
+        return rm === null || rm === undefined || String(rm).trim() === "" ? null : String(rm).trim();
+      })(),
+      photo: imagesByRow.get(r) ?? null,
+    });
+  }
 
-    order += 1;
+  // 2) Agrupar: por celda de foto combinada, o por código base.
+  const groups = new Map<string, RawLine[]>();
+  const order: string[] = [];
+  for (const ln of lines) {
+    const key = mergeGroupOf(ln.r) ?? `c:${baseCode(ln.codes[0])}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(ln);
+  }
+
+  // 3) Construir los ítems agregados.
+  const items: ParsedItem[] = [];
+  let photosFound = 0;
+
+  for (let i = 0; i < order.length; i++) {
+    const g = groups.get(order[i])!;
+    const allCodes = g.flatMap((l) => l.codes);
+    const bases = Array.from(new Set(allCodes.map(baseCode)));
+    const distinct = Array.from(new Set(allCodes));
+
+    let codigo: string;
+    if (bases.length === 1) {
+      codigo = distinct.length > 1 ? bases[0] : distinct[0];
+    } else {
+      codigo = `${bases[0]} +${bases.length - 1}`;
+    }
+
+    const sum = (fn: (l: RawLine) => number | null): number | null => {
+      let acc = 0;
+      let any = false;
+      for (const l of g) {
+        const v = fn(l);
+        if (v !== null) {
+          acc += v;
+          any = true;
+        }
+      }
+      return any ? +acc.toFixed(6) : null;
+    };
+
+    const photo = g.find((l) => l.photo)?.photo ?? null;
     if (photo) photosFound += 1;
 
-    rows.push({
-      rowIndex: order,
+    const remarks = g.map((l) => l.remark).filter(Boolean) as string[];
+
+    items.push({
+      rowIndex: i + 1,
       photo,
-      codigo: codigoStr,
-      precioChina,
-      cantidadPorCaja,
-      cbmUnitario,
-      cbmTotal,
+      codigo,
+      precioChina: g.find((l) => l.precioChina !== null)?.precioChina ?? null,
+      cantidadPorCaja: g[0].cantidadPorCaja,
+      unidades: sum((l) => l.unidades),
+      montoTotal: sum((l) => l.monto),
+      unidad: g.find((l) => l.unidad)?.unidad ?? null,
+      cbmUnitario: g[0].cbmUnitario,
+      cbmTotal: sum((l) => l.cbmTotal),
+      remark: remarks.length ? remarks.join("\n") : null,
+      detalle: g.map((l) => ({
+        codigos: l.codes,
+        unidades: l.unidades,
+        monto: l.monto,
+        cbmTotal: l.cbmTotal,
+        precioChina: l.precioChina,
+        remark: l.remark,
+      })),
     });
   }
 
   return {
-    rows,
+    items,
     photosFound,
-    totalRows: rows.length,
+    totalItems: items.length,
+    containerTotal,
     columnsDetected: {
       foto: headers.foto ?? null,
       codigo: headers.codigo ?? null,
       precioChina: headers.precioChina ?? null,
-      cantidadPorCaja: headers.cantidadPorCaja ?? null,
-      cbmUnitario: headers.cbmUnitario ?? null,
+      unidades: headers.quantity ?? null,
       cbmTotal: headers.cbmTotal ?? null,
+      montoTotal: headers.amount ?? null,
     },
   };
 }

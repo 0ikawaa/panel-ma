@@ -52,3 +52,4 @@ next-env.d.ts
 /_inspect.mjs
 /_reprocess.ts
 /_headers.ts
+/_analyze.ts

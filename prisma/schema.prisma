@@ -13,28 +13,37 @@ datasource db {
 
 /// Un contenedor / arribo. Cada uno agrupa las líneas cargadas desde un Excel.
 model Container {
-  id        String    @id @default(cuid())
-  name      String // Ej: "Contenedor 1 - Julio 2026"
-  supplier  String? // Proveedor (opcional)
-  eta       DateTime? // Fecha estimada de arribo (opcional)
-  notes     String? // Notas (opcional)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  products  Product[]
+  id         String    @id @default(cuid())
+  name       String // Ej: "Contenedor 1 - Julio 2026"
+  supplier   String? // Proveedor (opcional)
+  eta        DateTime? // Fecha estimada de arribo (opcional)
+  notes      String? // Notas (opcional)
+  totalPrice Float? // Precio total del contenedor (fila "TOTAL" del Excel)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  products   Product[]
 }
 
 /// Una línea del Excel (un producto dentro de un contenedor).
+/// Un ítem del contenedor. Puede agrupar varias líneas del Excel (mismo código
+/// base, o líneas que comparten una foto combinada). El detalle por talle/línea
+/// queda en `detalle`.
 model Product {
   id              String    @id @default(cuid())
   containerId     String
   container       Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
-  rowIndex        Int // Orden de la fila en el Excel
+  rowIndex        Int // Orden de aparición en el Excel
   photo           String? // Foto en base64 (data URL) extraída de la celda
-  codigo          String?
-  precioChina     Float? // Precio en China (USD)
-  cantidadPorCaja Int?
+  codigo          String? // Código a mostrar (base cuando hay varios)
+  precioChina     Float? // Precio unitario FOB (USD), representativo
+  cantidadPorCaja Int? // Unidades por caja (QTY/CTN) de la primera línea
+  unidades        Int? // Unidades totales que llegan (Quantity)
+  montoTotal      Float? // Precio del lote (Amount)
+  unidad          String? // Unidad: pc / Pair / SET…
+  remark          String? // Observaciones combinadas
   cbmUnitario     Float?
-  cbmTotal        Float?
+  cbmTotal        Float? // CBM total del ítem (suma)
+  detalle         Json? // Desglose por línea/talle: [{codigos, unidades, monto, cbmTotal, remark}]
   createdAt       DateTime  @default(now())
 
   @@index([containerId])
