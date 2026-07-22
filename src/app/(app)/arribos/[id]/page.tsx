@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
@@ -18,6 +20,10 @@ export default async function ContainerDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const token = (await cookies()).get(AUTH_COOKIE)?.value;
+  const session = await verifySessionToken(token);
+  const canEdit = session?.isAdmin ?? false;
+
   const container = await prisma.container.findUnique({
     where: { id },
     include: { products: { orderBy: { rowIndex: "asc" } } },
@@ -234,6 +240,7 @@ export default async function ContainerDetailPage({
           products={rows}
           freightCost={container.freightCost}
           origin={container.origin}
+          canEdit={canEdit}
         />
       )}
     </div>

@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { fmtCBM, fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
 import { landedCost, cbmPorUnidad, IVA, type Origin } from "@/lib/cost";
+import EditProductButton from "./EditProductButton";
 
 export interface DetalleLinea {
   codigos: string[];
@@ -40,10 +41,12 @@ export default function ProductTable({
   products,
   freightCost,
   origin,
+  canEdit = false,
 }: {
   products: ProductRow[];
   freightCost: number | null;
   origin: string;
+  canEdit?: boolean;
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -195,12 +198,15 @@ export default function ProductTable({
                       )}
                     </td>
                     <td className="px-4 py-2.5 font-medium text-zinc-100">
-                      {p.codigo ?? <span className="text-zinc-600">—</span>}
-                      {expandable && (
-                        <span className="ml-2 rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300">
-                          detalle
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span>{p.codigo ?? <span className="text-zinc-600">—</span>}</span>
+                        {expandable && (
+                          <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300">
+                            detalle
+                          </span>
+                        )}
+                        {canEdit && <EditProductButton product={p} />}
+                      </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-white">
                       {fmtInt(p.unidades)}
