@@ -31,8 +31,9 @@ export default function Calculadora() {
   const lc = landedCost(origin, fob, cbmU, freight);
 
   const gananciaPct = parse(ganancia);
-  const precioVenta = lc && gananciaPct != null ? lc.final * (1 + gananciaPct / 100) : null;
-  const gananciaUSD = lc && precioVenta != null ? precioVenta - lc.final : null;
+  const precioVentaNeto = lc && gananciaPct != null ? lc.nacionalizado * (1 + gananciaPct / 100) : null;
+  const gananciaUSD = lc && precioVentaNeto != null ? precioVentaNeto - lc.nacionalizado : null;
+  const precioVentaIva = precioVentaNeto != null ? precioVentaNeto * IVA : null;
 
   const faltan =
     origin === "china"
@@ -165,14 +166,17 @@ export default function Calculadora() {
               )}
             </div>
 
-            {precioVenta != null && gananciaPct != null && (
+            {precioVentaNeto != null && gananciaPct != null && (
               <div className="mt-5 space-y-2.5 border-t border-white/10 pt-5 text-sm">
                 <Row label={`+ Ganancia (${gananciaPct}%)`} value={fmtUSD(gananciaUSD!)} />
                 <div className="mt-3 rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-teal-400/80">
                     Precio de venta sugerido
                   </p>
-                  <p className="mt-1 text-3xl font-bold text-teal-200">{fmtUSD(precioVenta)}</p>
+                  <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <p className="text-3xl font-bold text-teal-200">{fmtUSD(precioVentaNeto)}</p>
+                    <p className="text-sm text-teal-400/80">+ IVA ({fmtUSD(precioVentaIva!)} IVA inc.)</p>
+                  </div>
                 </div>
               </div>
             )}
