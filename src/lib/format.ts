@@ -37,6 +37,21 @@ export function fmtInt(n: number | null | undefined): string {
   return n.toLocaleString(LOCALE);
 }
 
+/** Pesos con separador de miles y signo $ (ej. "$35.148", "-$843"). Redondea. */
+export function fmtPeso(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  const r = Math.round(n);
+  return (r < 0 ? "-$" : "$") + Math.abs(r).toLocaleString(LOCALE);
+}
+
+/** Pesos con signo explícito (+/–), útil para envío y ajustes (ej. "+$38"). */
+export function fmtPesoSigned(n: number | null | undefined): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  const r = Math.round(n);
+  if (r === 0) return "$0";
+  return (r < 0 ? "-$" : "+$") + Math.abs(r).toLocaleString(LOCALE);
+}
+
 export function fmtDate(d: Date | string | null | undefined): string {
   if (!d) return "—";
   const date = typeof d === "string" ? new Date(d) : d;

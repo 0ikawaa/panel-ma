@@ -69,6 +69,18 @@ model Reposicion {
   updatedAt  DateTime @updatedAt
 }
 
+/// Costo unitario manual (override) de un SKU. La API MUNDO SHOP es de solo
+/// lectura, así que el costo editado desde Órdenes Real-Time se guarda acá y
+/// pisa al `standard_price` de Odoo para ese SKU en todas las órdenes.
+model CostOverride {
+  sku       String   @id // default_code / SKU de MercadoLibre
+  cost      Float // Costo unitario en pesos
+  note      String? // Nota opcional
+  updatedBy String? // Usuario que editó por última vez
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Usuario de la plataforma con acceso por módulos.
 model User {
   id           String   @id @default(cuid())

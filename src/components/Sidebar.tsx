@@ -31,6 +31,12 @@ export default function Sidebar({
   const [open, setOpen] = useState(false);
   const showChildren = open || impActive;
 
+  const isReposicion = pathname.startsWith("/reposicion");
+  const isOrdenes = pathname.startsWith("/ordenes");
+  const ventasActive = isReposicion || isOrdenes;
+  const [ventasOpen, setVentasOpen] = useState(false);
+  const showVentas = ventasOpen || ventasActive;
+
   const linkClass = (active: boolean) =>
     `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
       active ? "brand-gradient brand-glow text-white" : "text-zinc-400 hover:bg-white/5 hover:text-white"
@@ -93,16 +99,41 @@ export default function Sidebar({
           </div>
         )}
 
-        {can("reposicion") && (
-          <Link href="/reposicion" className={linkClass(pathname.startsWith("/reposicion"))}>
-            {icon(
-              <>
-                <path d="M3 3v18h18" />
-                <path d="M7 14l3-3 3 3 5-6" />
-              </>,
+        {(can("reposicion") || can("ordenes")) && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setVentasOpen((v) => !v)}
+              className={`${linkClass(ventasActive && !showVentas)} w-full`}
+            >
+              {icon(
+                <>
+                  <path d="M3 3v18h18" />
+                  <path d="M7 14l3-3 3 3 5-6" />
+                </>,
+              )}
+              <span className="flex-1 text-left">Ventas</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`h-4 w-4 transition-transform ${showVentas ? "rotate-90" : ""}`}>
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+            {showVentas && (
+              <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
+                {can("reposicion") && (
+                  <Link href="/reposicion" className={subLinkClass(isReposicion)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isReposicion ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Reposición
+                  </Link>
+                )}
+                {can("ordenes") && (
+                  <Link href="/ordenes" className={subLinkClass(isOrdenes)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isOrdenes ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Órdenes Real-Time
+                  </Link>
+                )}
+              </div>
             )}
-            Reposición
-          </Link>
+          </div>
         )}
 
         {can("admin") && (
