@@ -48,6 +48,13 @@ function fmtHora(iso: string): string {
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleTimeString("es-UY", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: true });
 }
+function fmtFechaLarga(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const dia = `${+iso.slice(8, 10)}/${+iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+  const hora = d.toLocaleTimeString("es-UY", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
+  return `${dia}, ${hora}`;
+}
 function csvCell(v: string | number): string {
   return `"${String(v).replace(/"/g, '""')}"`;
 }
@@ -75,6 +82,9 @@ export default function OrdenesRealTime() {
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [auto, setAuto] = useState(false);
+
+  // Panel lateral de detalle de una orden.
+  const [detail, setDetail] = useState<ApiOrder | null>(null);
 
   // Modal de edición de costo
   const [edit, setEdit] = useState<{ sku: string; title: string; current: number | null } | null>(null);
@@ -127,6 +137,17 @@ export default function OrdenesRealTime() {
     const id = setInterval(() => fetchRef.current(), 60000);
     return () => clearInterval(id);
   }, [auto]);
+
+  // Cerrar con Escape: primero el modal de costo, si no el panel de detalle.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      if (edit) setEdit(null);
+      else if (detail) setDetail(null);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [edit, detail]);
 
   // Costo unitario efectivo de un ítem: edición local > override guardado > Odoo.
   const effCost = useCallback(
@@ -463,7 +484,10 @@ export default function OrdenesRealTime() {
                 const dim = !m.hasCost && !incluirSinCosto;
                 return (
                   <FragmentRow key={o.orderId}>
-                    <tr className={`transition hover:bg-white/[0.03] ${dim ? "opacity-55" : ""}`}>
+                    <tr
+                      onClick={() => setDetail(o)}
+                      className={`cursor-pointer transition hover:bg-white/[0.03] ${detail?.orderId === o.orderId ? "bg-white/[0.04]" : ""} ${dim ? "opacity-55" : ""}`}
+                    >
                       <td className="whitespace-nowrap px-2.5 py-2.5 text-zinc-300">
                         <div>{fmtDiaCorto(o.date)}</div>
                         <div className="text-xs text-zinc-500">{fmtHora(o.date)}</div>
@@ -471,7 +495,7 @@ export default function OrdenesRealTime() {
                       <td className="px-2.5 py-2.5">
                         <div className="flex items-start gap-2">
                           {isPack ? (
-                            <button onClick={() => toggleRow(o.orderId)} className="mt-0.5 text-zinc-400 hover:text-white" aria-label="Ver órdenes del pack">
+                            <button onClick={(e) => { e.stopPropagation(); toggleRow(o.orderId); }} className="mt-0.5 text-zinc-400 hover:text-white" aria-label="Ver órdenes del pack">
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}><path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             </button>
                           ) : <span className="w-4" />}
@@ -490,7 +514,7 @@ export default function OrdenesRealTime() {
                       <td className="px-2.5 py-2.5 text-right tabular-nums text-zinc-100">{fmtPeso(m.venta)}</td>
                       <td className="px-2.5 py-2.5 text-right tabular-nums">
                         <button
-                          onClick={() => it && openEdit(it.sku, it.title, effCost(it))}
+                          onClick={(e) => { e.stopPropagation(); if (it) openEdit(it.sku, it.title, effCost(it)); }}
                           className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 transition hover:bg-white/10 ${m.hasCost ? "text-zinc-100" : "text-amber-300"}`}
                           title="Editar costo del SKU"
                         >
@@ -579,6 +603,131 @@ export default function OrdenesRealTime() {
         </div>
       )}
 
+      {/* ---------- Panel lateral: detalle de la orden ---------- */}
+      {detail && (() => {
+        const m = metrics(detail);
+        const plataforma = m.comision + m.publi;
+        const margenProd = m.venta - m.costo;
+        const util = Math.max(0, m.margen);
+        const totalSeg = m.costo + plataforma + util || 1;
+        const wCosto = (m.costo / totalSeg) * 100;
+        const wPlat = (plataforma / totalSeg) * 100;
+        const wUtil = (util / totalSeg) * 100;
+        const pctOf = (v: number) => (m.venta ? Math.round((v / m.venta) * 100) : 0);
+        const mlUrl = `https://www.mercadolibre.com.uy/ventas/${detail.orderId}/detalle`;
+        return (
+          <div className="fixed inset-0 z-40 flex justify-end">
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDetail(null)} />
+            <div className="animate-in relative h-full w-full max-w-[420px] overflow-y-auto border-l border-white/10 bg-[#131319] shadow-2xl">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#131319]/95 px-5 py-4 backdrop-blur">
+                <h2 className="text-lg font-bold text-white">Detalle</h2>
+                <button onClick={() => setDetail(null)} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+                </button>
+              </div>
+
+              <div className="space-y-6 px-5 py-5">
+                {/* PRODUCTO */}
+                <Section label="Producto">
+                  {detail.items.map((it, i) => (
+                    <div key={it.itemId || i} className="mb-1.5">
+                      <div className="font-semibold leading-snug text-zinc-100">{it.title || "—"}</div>
+                      <div className="mt-0.5 text-xs text-zinc-500">
+                        {it.sku || "sin SKU"}{it.qty > 1 ? ` · ${it.qty} u.` : ""}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+                    <span>Orden #{detail.orderId}</span>
+                    <a href={mlUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-teal-300 hover:text-teal-200">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3.5 w-3.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Ver venta en ML
+                    </a>
+                  </div>
+                </Section>
+
+                {/* VENTA */}
+                <Section label="Venta">
+                  <DetailRow label="Precio" value={fmtPeso(m.venta)} strong />
+                  <DetailRow label="Fecha" value={fmtFechaLarga(detail.date)} />
+                </Section>
+
+                {/* COSTO PRODUCTO */}
+                <Section label="Costo producto">
+                  {detail.items.map((it, i) => {
+                    const c = effCost(it);
+                    return (
+                      <div key={it.itemId || i} className="flex items-center justify-between py-0.5">
+                        <span className="text-zinc-400">Costo unit.{detail.items.length > 1 && it.sku ? ` · ${it.sku}` : ""}</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openEdit(it.sku, it.title, c); }}
+                          className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition hover:bg-white/10"
+                          title="Editar costo del SKU"
+                        >
+                          <span className={`tabular-nums font-semibold ${c == null ? "text-amber-300" : "text-zinc-100"}`}>{c == null ? "sin costo" : fmtPeso(c)}</span>
+                          <span className="flex h-5 w-5 items-center justify-center rounded bg-teal-500/15 text-teal-300">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                          </span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div className="mt-2 border-t border-white/10 pt-2">
+                    <DetailRow label="Margen producto" value={`${fmtPeso(margenProd)} (${pctOf(margenProd)}%)`} tone={margenProd < 0 ? "red" : "green"} strong />
+                  </div>
+                  {!m.hasCost && (
+                    <p className="mt-1.5 text-xs text-amber-300/90">Costo incompleto: la utilidad es estimada.</p>
+                  )}
+                </Section>
+
+                {/* PLATAFORMA ML */}
+                <Section label="Plataforma ML">
+                  <DetailRow label="Comisión" value={m.comision ? "-" + fmtPeso(m.comision) : "$0"} tone="red" />
+                  {m.publi > 0 && <DetailRow label={`Publicidad (${publiPct}%)`} value={"-" + fmtPeso(m.publi)} tone="red" />}
+                </Section>
+
+                {/* ENVÍO */}
+                <Section label="Envío">
+                  <div className="flex items-center justify-between py-0.5">
+                    <span className="text-zinc-400">Tipo</span>
+                    <TipoBadges o={detail} />
+                  </div>
+                  <DetailRow label="ML te pasa" value={fmtPesoSigned(detail.shipSave ?? 0)} tone={(detail.shipSave ?? 0) >= 0 ? "green" : "red"} />
+                  <DetailRow label="Cadete" value={detail.shipCost ? "-" + fmtPeso(detail.shipCost) : "$0"} tone="red" />
+                  <div className="mt-2 border-t border-white/10 pt-2">
+                    <DetailRow label="Neto envío" value={fmtPesoSigned(m.envio)} tone={m.envio < 0 ? "red" : "green"} strong />
+                  </div>
+                </Section>
+
+                {/* RESULTADO */}
+                <Section label="Resultado">
+                  <DetailRow label="Venta" value={fmtPeso(m.venta)} />
+                  <DetailRow label="Margen producto" value={fmtPeso(margenProd)} tone={margenProd < 0 ? "red" : "green"} />
+                  <DetailRow label="Plataforma" value={plataforma ? "-" + fmtPeso(plataforma) : "$0"} tone="red" />
+                  <DetailRow label="Envío neto" value={fmtPesoSigned(m.envio)} tone={m.envio < 0 ? "red" : "green"} />
+                  <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
+                    <span className="text-base font-bold text-white">UTILIDAD</span>
+                    <span className={`text-xl font-bold tabular-nums ${m.margen < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                      {fmtPeso(m.margen)} <span className="text-sm">({(m.pct * 100).toFixed(0)}%)</span>
+                    </span>
+                  </div>
+                  <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/5">
+                    <div style={{ width: `${wCosto}%` }} className="bg-red-500/70" />
+                    <div style={{ width: `${wPlat}%` }} className="bg-amber-500/70" />
+                    <div style={{ width: `${wUtil}%` }} className="bg-emerald-500/70" />
+                  </div>
+                  <div className="mt-1.5 flex justify-between text-[11px] font-medium">
+                    <span className="text-red-400">Costo {pctOf(m.costo)}%</span>
+                    <span className="text-amber-300">ML {pctOf(plataforma)}%</span>
+                    <span className="text-emerald-400">Utilidad {pctOf(m.margen)}%</span>
+                  </div>
+                </Section>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ---------- Modal editar costo ---------- */}
       {edit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -609,6 +758,25 @@ export default function OrdenesRealTime() {
 // ---------- Subcomponentes ----------
 function FragmentRow({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-teal-400">{label}</div>
+      <div className="space-y-0.5 text-sm">{children}</div>
+    </section>
+  );
+}
+
+function DetailRow({ label, value, tone, strong }: { label: string; value: string; tone?: "red" | "green"; strong?: boolean }) {
+  const color = tone === "red" ? "text-red-400" : tone === "green" ? "text-emerald-400" : "text-zinc-100";
+  return (
+    <div className="flex items-center justify-between py-0.5">
+      <span className="text-zinc-400">{label}</span>
+      <span className={`tabular-nums ${strong ? "font-bold" : "font-medium"} ${color}`}>{value}</span>
+    </div>
+  );
 }
 
 function Th({ children, right, onClick, className }: { children: React.ReactNode; right?: boolean; onClick?: () => void; className?: string }) {
