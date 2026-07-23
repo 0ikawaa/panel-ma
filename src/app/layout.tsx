@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,18 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MA Importaciones · Panel",
   description: "Panel de gestión: importaciones, ventas, reposición y métricas.",
+  // Nombre bajo el ícono al agregar a pantalla de inicio en iOS
+  appleWebApp: {
+    title: "MA Panel",
+    capable: true,
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#08080c",
+  // Deja que el contenido use el área bajo el notch en modo app
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
