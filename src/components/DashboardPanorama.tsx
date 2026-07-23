@@ -46,22 +46,33 @@ function fmtLocal(d: Date): string {
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
-function mtdRange() {
-  const d = new Date();
-  return { desde: fmtLocal(new Date(d.getFullYear(), d.getMonth(), 1)), hasta: fmtLocal(d) };
-}
-function prevMonthRange() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = d.getMonth();
-  const diasPrev = new Date(y, m, 0).getDate(); // último día del mes anterior
-  const dia = Math.min(d.getDate(), diasPrev);
-  return { desde: fmtLocal(new Date(y, m - 1, 1)), hasta: fmtLocal(new Date(y, m - 1, dia)) };
-}
 function monthsAgoStr(n: number): string {
   const d = new Date();
   d.setMonth(d.getMonth() - n);
   return fmtLocal(d);
+}
+function currentYm(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+// Rango (desde/hasta) de un mes "YYYY-MM": si es el mes en curso llega hasta hoy
+// (MTD); si es un mes pasado, el mes completo.
+function ymRange(ym: string): { desde: string; hasta: string } {
+  const [y, m] = ym.split("-").map(Number);
+  const first = new Date(y, m - 1, 1);
+  const today = new Date();
+  const esActual = y === today.getFullYear() && m - 1 === today.getMonth();
+  const last = esActual ? today : new Date(y, m, 0); // 0 = último día del mes
+  return { desde: fmtLocal(first), hasta: fmtLocal(last) };
+}
+// Mes anterior a "YYYY-MM", hasta el mismo día que el rango elegido (comparación
+// pareja: MTD vs misma porción del mes previo; mes completo vs mes completo).
+function ymPrevRange(ym: string): { desde: string; hasta: string } {
+  const [y, m] = ym.split("-").map(Number);
+  const diaTope = Number(ymRange(ym).hasta.slice(8, 10));
+  const diasPrev = new Date(y, m - 1, 0).getDate();
+  const dia = Math.min(diaTope, diasPrev);
+  return { desde: fmtLocal(new Date(y, m - 2, 1)), hasta: fmtLocal(new Date(y, m - 2, dia)) };
 }
 
 async function getJson<T>(u: string): Promise<{ data: T | null; status: number }> {
@@ -101,7 +112,11 @@ function deriveVentas(resp: ResumenResp) {
   return { facturado, margen, ventaCC, ordenes, pct: ventaCC ? margen / ventaCC : 0, ticket: ordenes ? facturado / ordenes : 0, porCanal };
 }
 
-const MES_LARGO = new Intl.DateTimeFormat("es-UY", { month: "long", year: "numeric" }).format(new Date());
+function ymLong(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Intl.DateTimeFormat("es-UY", { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1));
+}
 function monthShort(ym: string): string {
   const [y, m] = ym.split("-").map(Number);
   if (!y || !m) return ym;
@@ -113,22 +128,36 @@ export default function DashboardPanorama() {
   const [prev, setPrev] = useState<{ data: ResumenResp | null; status: number } | null>(null);
   const [imp, setImp] = useState<{ data: ImportResp | null; status: number } | null>(null);
   const [repos, setRepos] = useState<{ data: ReposResp | null; status: number } | null>(null);
+  // Mes elegido en el gráfico de tendencia (YYYY-MM). Arranca en el mes en curso.
+  const [selMonth, setSelMonth] = useState<string>(currentYm);
 
+  // Tendencia, importaciones y reposición: una sola vez (no dependen del mes).
   useEffect(() => {
     let alive = true;
-    const mtd = mtdRange();
-    const pm = prevMonthRange();
     const desdeRepos = monthsAgoStr(REPOS_MESES_PERIODO);
-    // Cada fetch actualiza su estado apenas llega: una sección lenta o caída no
-    // bloquea ni oculta a las demás (ej. la tendencia no depende de /api/resumen).
     getJson<ImportResp>(`/api/dashboard`).then((i) => { if (alive) setImp(i); });
-    getJson<ResumenResp>(`/api/resumen?desde=${mtd.desde}&hasta=${mtd.hasta}`).then((c) => { if (alive) setCur(c); });
-    getJson<ResumenResp>(`/api/resumen?desde=${pm.desde}&hasta=${pm.hasta}`).then((p) => { if (alive) setPrev(p); });
-    getJson<ReposResp>(`/api/reposicion?desde=${desdeRepos}&hasta=${mtd.hasta}`).then((r) => { if (alive) setRepos(r); });
+    getJson<ReposResp>(`/api/reposicion?desde=${desdeRepos}&hasta=${fmtLocal(new Date())}`).then((r) => { if (alive) setRepos(r); });
     return () => {
       alive = false;
     };
   }, []);
+
+  // Ventas del mes seleccionado (+ mes anterior para la variación). Se re-consulta
+  // al cambiar de mes en el gráfico.
+  useEffect(() => {
+    let alive = true;
+    setCur(null);
+    setPrev(null);
+    const r = ymRange(selMonth);
+    const p = ymPrevRange(selMonth);
+    getJson<ResumenResp>(`/api/resumen?desde=${r.desde}&hasta=${r.hasta}`).then((c) => { if (alive) setCur(c); });
+    getJson<ResumenResp>(`/api/resumen?desde=${p.desde}&hasta=${p.hasta}`).then((pp) => { if (alive) setPrev(pp); });
+    return () => {
+      alive = false;
+    };
+  }, [selMonth]);
+
+  const selLong = ymLong(selMonth);
 
   // Loading por sección (cada estado es null hasta que su fetch resuelve).
   const loadingVentas = cur === null;
@@ -171,7 +200,7 @@ export default function DashboardPanorama() {
     <div className="space-y-4">
       {/* ---------- KPIs con variación vs mes anterior ---------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={`Facturación · ${MES_LARGO}`} value={vCur ? fmtPeso(vCur.facturado) : "—"} delta={pctChange(vCur?.facturado, vPrev?.facturado)} loading={loadingVentas} />
+        <Kpi label={`Facturación · ${selLong}`} value={vCur ? fmtPeso(vCur.facturado) : "—"} delta={pctChange(vCur?.facturado, vPrev?.facturado)} loading={loadingVentas} />
         <Kpi label="Margen del mes" value={vCur ? fmtPeso(vCur.margen) : "—"} sub={vCur ? `${(vCur.pct * 100).toFixed(0)}% s/ venta` : undefined} delta={pctChange(vCur?.margen, vPrev?.margen)} tone={vCur && vCur.margen < 0 ? "red" : "green"} loading={loadingVentas} />
         <Kpi label="Órdenes del mes" value={vCur ? fmtInt(vCur.ordenes) : "—"} delta={pctChange(vCur?.ordenes, vPrev?.ordenes)} loading={loadingVentas} />
         <Kpi label="Ticket promedio" value={vCur ? fmtPeso(vCur.ticket) : "—"} delta={pctChange(vCur?.ticket, vPrev?.ticket)} loading={loadingVentas} />
@@ -184,22 +213,30 @@ export default function DashboardPanorama() {
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Tendencia 6 meses — viene de /api/dashboard, independiente de ventas */}
           <div>
-            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Facturación · últimos 6 meses</p>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Facturación · últimos 6 meses <span className="normal-case text-zinc-600">· tocá un mes</span>
+            </p>
             {loadingImp ? (
               <div className="flex h-40 items-center text-sm text-zinc-500">Cargando…</div>
             ) : trend.length > 0 ? (
               <div className="flex h-40 items-end gap-2">
-                {trend.map((t, i) => {
-                  const isLast = i === trend.length - 1;
+                {trend.map((t) => {
+                  const isSel = t.month === selMonth;
                   // Altura en px (no %): el % no resuelve dentro de un flex-col sin
                   // altura definida y las barras quedaban colapsadas. 144px ≈ alto
                   // útil de la columna (h-40 = 160px menos la etiqueta).
                   const h = Math.max(4, Math.round((t.facturado / maxTrend) * 144));
                   return (
-                    <div key={t.month} className="flex flex-1 flex-col items-center justify-end gap-1.5" title={fmtPeso(t.facturado)}>
-                      <div className={`w-full rounded-t ${isLast ? "brand-gradient" : "bg-white/15"}`} style={{ height: `${h}px` }} />
-                      <span className={`text-[10px] ${isLast ? "font-semibold text-teal-300" : "text-zinc-500"}`}>{monthShort(t.month)}</span>
-                    </div>
+                    <button
+                      key={t.month}
+                      type="button"
+                      onClick={() => setSelMonth(t.month)}
+                      className="group flex flex-1 flex-col items-center justify-end gap-1.5"
+                      title={`${monthShort(t.month)} · ${fmtPeso(t.facturado)}`}
+                    >
+                      <div className={`w-full rounded-t transition ${isSel ? "brand-gradient" : "bg-white/15 group-hover:bg-white/30"}`} style={{ height: `${h}px` }} />
+                      <span className={`text-[10px] transition ${isSel ? "font-semibold text-teal-300" : "text-zinc-500 group-hover:text-zinc-300"}`}>{monthShort(t.month)}</span>
+                    </button>
                   );
                 })}
               </div>
@@ -211,7 +248,7 @@ export default function DashboardPanorama() {
           </div>
           {/* Canales — viene de /api/resumen */}
           <div>
-            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Por canal · {MES_LARGO}</p>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Por canal · {selLong}</p>
             {loadingVentas ? (
               <div className="flex h-40 items-center text-sm text-zinc-500">Cargando…</div>
             ) : vCur ? (
