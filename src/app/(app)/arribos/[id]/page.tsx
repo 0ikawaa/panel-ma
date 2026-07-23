@@ -11,6 +11,8 @@ import EditEtaButton from "@/components/EditEtaButton";
 import EditFreightButton from "@/components/EditFreightButton";
 import ReceiveButton from "@/components/ReceiveButton";
 import OriginSwitch from "@/components/OriginSwitch";
+import ContainerDocsPanel from "@/components/ContainerDocsPanel";
+import { estadoEfectivo } from "@/lib/embarques";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,10 @@ export default async function ContainerDetailPage({
 
   const container = await prisma.container.findUnique({
     where: { id },
-    include: { products: { orderBy: { rowIndex: "asc" } } },
+    include: {
+      products: { orderBy: { rowIndex: "asc" } },
+      docs: { orderBy: { createdAt: "asc" } },
+    },
   });
 
   if (!container) notFound();
@@ -203,6 +208,21 @@ export default async function ContainerDetailPage({
           )}
         </>
       )}
+
+      {/* Documentación del embarque */}
+      <ContainerDocsPanel
+        containerId={container.id}
+        estado={estadoEfectivo(container)}
+        initial={container.docs.map((d) => ({
+          id: d.id,
+          type: d.type,
+          name: d.name,
+          url: d.url,
+          size: d.size,
+          uploadedBy: d.uploadedBy,
+          createdAt: d.createdAt.toISOString(),
+        }))}
+      />
 
       {/* Estadísticas del contenedor */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -5,7 +5,7 @@ export default function EmbarquesTabs({
   enCamino,
   recibidos,
 }: {
-  active: "camino" | "recibidos" | "buscar";
+  active: "camino" | "recibidos" | "buscar" | "tablero";
   enCamino: number;
   recibidos: number;
 }) {
@@ -46,6 +46,7 @@ export default function EmbarquesTabs({
 
   return (
     <div className="flex flex-wrap gap-2">
+      {tab("/arribos/tablero", "Tablero", active === "tablero", "brand")}
       {tab("/arribos", "En camino", active === "camino", "brand", enCamino)}
       {tab("/arribos/recibidos", "Recibidos", active === "recibidos", "emerald", recibidos)}
       {tab("/buscar", "Buscar SKU", active === "buscar", "indigo")}

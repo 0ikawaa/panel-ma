@@ -89,9 +89,11 @@ export default function Sidebar({
   const isDashboard = pathname.startsWith("/dashboard");
   const isInicio = pathname === "/"; // Resumen de Importaciones
   const isCalculadora = pathname.startsWith("/arribos/calculadora");
+  const isTablero = pathname.startsWith("/arribos/tablero");
   const isEmbarques =
-    (pathname.startsWith("/arribos") && !isCalculadora) || pathname.startsWith("/buscar");
-  const impActive = isInicio || isEmbarques || isCalculadora;
+    (pathname.startsWith("/arribos") && !isCalculadora && !isTablero) ||
+    pathname.startsWith("/buscar");
+  const impActive = isInicio || isEmbarques || isCalculadora || isTablero;
 
   const [open, setOpen] = useState(false);
   const showChildren = open || impActive;
@@ -99,7 +101,8 @@ export default function Sidebar({
   const isReposicion = pathname.startsWith("/reposicion");
   const isOrdenes = pathname.startsWith("/ordenes");
   const isResumen = pathname.startsWith("/resumen");
-  const ventasActive = isReposicion || isOrdenes || isResumen;
+  const isRentabilidad = pathname.startsWith("/rentabilidad");
+  const ventasActive = isReposicion || isOrdenes || isResumen || isRentabilidad;
   const [ventasOpen, setVentasOpen] = useState(false);
   const showVentas = ventasOpen || ventasActive;
 
@@ -171,6 +174,10 @@ export default function Sidebar({
                 )}
                 {can("embarques") && (
                   <>
+                    <Link href="/arribos/tablero" className={subLinkClass(isTablero)}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isTablero ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                      Tablero
+                    </Link>
                     <Link href="/arribos" className={subLinkClass(isEmbarques)}>
                       <span className={`h-1.5 w-1.5 rounded-full ${isEmbarques ? "bg-indigo-400" : "bg-zinc-600"}`} />
                       Embarques
@@ -207,10 +214,16 @@ export default function Sidebar({
             {showVentas && (
               <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
                 {can("resumen") && (
-                  <Link href="/resumen" className={subLinkClass(isResumen)}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${isResumen ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                    Resumen
-                  </Link>
+                  <>
+                    <Link href="/resumen" className={subLinkClass(isResumen)}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isResumen ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                      Resumen
+                    </Link>
+                    <Link href="/rentabilidad" className={subLinkClass(isRentabilidad)}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isRentabilidad ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                      Rentabilidad
+                    </Link>
+                  </>
                 )}
                 {can("ordenes") && (
                   <Link href="/ordenes" className={subLinkClass(isOrdenes)}>

@@ -94,9 +94,12 @@ export async function uploadDataUrlPhotos(
   return map;
 }
 
-/** Borra de Blob las URLs que sean fotos alojadas ahí (best-effort). */
-export async function deleteBlobPhotos(urls: (string | null | undefined)[]): Promise<void> {
+/** Borra de Blob las URLs alojadas ahí, sean fotos o adjuntos (best-effort). */
+export async function deleteBlobUrls(urls: (string | null | undefined)[]): Promise<void> {
   const toDelete = Array.from(new Set(urls.filter(isBlobPhoto)));
   if (toDelete.length === 0) return;
   await del(toDelete).catch(() => {});
 }
+
+/** Alias histórico de `deleteBlobUrls` para las fotos de productos. */
+export const deleteBlobPhotos = deleteBlobUrls;

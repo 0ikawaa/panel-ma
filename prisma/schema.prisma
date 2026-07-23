@@ -21,12 +21,35 @@ model Container {
   totalPrice Float? // Precio total del contenedor (fila "TOTAL" del Excel)
   freightCost Float? // Costo del flete del contenedor (USD)
   origin     String  @default("china") // "china" | "brasil"
+  /// Etapa del embarque en el tablero: produccion | embarcado | transito |
+  /// aduana | deposito. `receivedAt` manda: si tiene fecha, el estado efectivo
+  /// es "deposito" (ver `estadoEfectivo` en lib/embarques.ts). Así los
+  /// contenedores que ya existían no necesitan migración de datos.
+  status     String  @default("produccion")
   receivedAt DateTime? // Fecha en que ingresó al depósito (null = en camino)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
   products   Product[]
+  docs       ContainerDoc[]
 
   @@index([receivedAt])
+  @@index([status])
+}
+
+/// Documento adjunto de un embarque (factura, packing list, BL, DUA…).
+/// El archivo vive en Vercel Blob; acá solo guardamos la URL y los metadatos.
+model ContainerDoc {
+  id          String    @id @default(cuid())
+  containerId String
+  container   Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
+  type        String // factura | packing | bl | dua | seguro | otro
+  name        String // Nombre original del archivo
+  url         String // URL pública de Vercel Blob
+  size        Int? // Tamaño en bytes
+  uploadedBy  String? // Usuario que lo subió
+  createdAt   DateTime  @default(now())
+
+  @@index([containerId])
 }
 
 /// Una línea del Excel (un producto dentro de un contenedor).

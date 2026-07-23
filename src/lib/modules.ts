@@ -26,13 +26,14 @@ export function moduleForPath(pathname: string): string | null {
   if (pathname.startsWith("/arribos") || pathname.startsWith("/buscar")) return "embarques";
   if (pathname.startsWith("/reposicion")) return "reposicion";
   if (pathname.startsWith("/ordenes")) return "ordenes";
-  if (pathname.startsWith("/resumen")) return "resumen";
+  // La rentabilidad por SKU muestra costos y márgenes: mismo público que Resumen.
+  if (pathname.startsWith("/resumen") || pathname.startsWith("/rentabilidad")) return "resumen";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/api/admin")) return "admin";
   if (pathname.startsWith("/api/reposicion")) return "reposicion";
   if (pathname.startsWith("/api/containers")) return "embarques";
   if (pathname.startsWith("/api/ventas-ml") || pathname.startsWith("/api/costos")) return "ordenes";
-  if (pathname.startsWith("/api/resumen")) return "resumen";
+  if (pathname.startsWith("/api/resumen") || pathname.startsWith("/api/rentabilidad")) return "resumen";
   if (pathname.startsWith("/api/dashboard")) return "dashboard";
   // /api/blob solo emite el token de subida (cualquier sesión); el
   // procesamiento real está protegido por cada endpoint.

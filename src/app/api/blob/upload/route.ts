@@ -32,6 +32,13 @@ export async function POST(req: Request): Promise<NextResponse> {
             "image/png",
             "image/webp",
             "image/gif",
+            // Documentación de embarques (factura, packing list, BL, DUA…).
+            "application/pdf",
+            "application/msword",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "text/plain",
+            "text/csv",
+            "application/zip",
           ],
           maximumSizeInBytes: 50 * 1024 * 1024, // 50 MB
         };

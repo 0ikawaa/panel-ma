@@ -6,9 +6,11 @@ import { usePathname } from "next/navigation";
 const NAV = [
   { href: "/dashboard", module: "dashboard", label: "Dashboard" },
   { href: "/", module: "inicio", label: "Resumen Imp" },
+  { href: "/arribos/tablero", module: "embarques", label: "Tablero" },
   { href: "/arribos", module: "embarques", label: "Embarques" },
   { href: "/arribos/calculadora", module: "embarques", label: "Calculadora" },
   { href: "/resumen", module: "resumen", label: "Resumen Vtas" },
+  { href: "/rentabilidad", module: "resumen", label: "Rentabilidad" },
   { href: "/ordenes", module: "ordenes", label: "Órdenes ML" },
   { href: "/reposicion", module: "reposicion", label: "Reposición" },
   { href: "/admin", module: "admin", label: "Admin" },
@@ -23,11 +25,16 @@ export default function MobileNav({
 }) {
   const pathname = usePathname();
   const isCalc = pathname.startsWith("/arribos/calculadora");
+  const isTablero = pathname.startsWith("/arribos/tablero");
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
     if (href === "/arribos")
-      return (pathname.startsWith("/arribos") && !isCalc) || pathname.startsWith("/buscar");
+      return (
+        (pathname.startsWith("/arribos") && !isCalc && !isTablero) ||
+        pathname.startsWith("/buscar")
+      );
     if (href === "/arribos/calculadora") return isCalc;
+    if (href === "/arribos/tablero") return isTablero;
     return pathname.startsWith(href);
   };
 
