@@ -23,10 +23,12 @@ export default function Sidebar({
   const pathname = usePathname();
   const can = (m: string) => isAdmin || modules.includes(m);
 
+  const isDashboard = pathname.startsWith("/dashboard");
+  const isInicio = pathname === "/"; // Resumen de Importaciones
   const isCalculadora = pathname.startsWith("/arribos/calculadora");
   const isEmbarques =
     (pathname.startsWith("/arribos") && !isCalculadora) || pathname.startsWith("/buscar");
-  const impActive = isEmbarques || isCalculadora;
+  const impActive = isInicio || isEmbarques || isCalculadora;
 
   const [open, setOpen] = useState(false);
   const showChildren = open || impActive;
@@ -72,14 +74,18 @@ export default function Sidebar({
       <div className="mx-5 h-px bg-gradient-to-r from-teal-500/40 via-white/10 to-transparent" />
 
       <nav className="flex-1 space-y-1 px-3 py-2">
-        {can("inicio") && (
-          <Link href="/" className={linkClass(pathname === "/")}>
-            {icon(<path d="M3 10.5 12 3l9 7.5M5 9.5V21h5v-6h4v6h5V9.5" />)}
-            Inicio
+        {can("dashboard") && (
+          <Link href="/dashboard" className={linkClass(isDashboard)}>
+            {icon(
+              <>
+                <path d="M3 13h8V3H3v10Zm10 8h8V11h-8v10ZM3 21h8v-6H3v6ZM13 3v6h8V3h-8Z" />
+              </>,
+            )}
+            Dashboard
           </Link>
         )}
 
-        {can("embarques") && (
+        {(can("inicio") || can("embarques")) && (
           <div>
             <button
               type="button"
@@ -94,14 +100,24 @@ export default function Sidebar({
             </button>
             {showChildren && (
               <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
-                <Link href="/arribos" className={subLinkClass(isEmbarques)}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isEmbarques ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                  Embarques
-                </Link>
-                <Link href="/arribos/calculadora" className={subLinkClass(isCalculadora)}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${isCalculadora ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                  Calculadora
-                </Link>
+                {can("inicio") && (
+                  <Link href="/" className={subLinkClass(isInicio)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isInicio ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Resumen
+                  </Link>
+                )}
+                {can("embarques") && (
+                  <>
+                    <Link href="/arribos" className={subLinkClass(isEmbarques)}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isEmbarques ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                      Embarques
+                    </Link>
+                    <Link href="/arribos/calculadora" className={subLinkClass(isCalculadora)}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${isCalculadora ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                      Calculadora
+                    </Link>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -127,10 +143,10 @@ export default function Sidebar({
             </button>
             {showVentas && (
               <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
-                {can("reposicion") && (
-                  <Link href="/reposicion" className={subLinkClass(isReposicion)}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${isReposicion ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                    Reposición
+                {can("resumen") && (
+                  <Link href="/resumen" className={subLinkClass(isResumen)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isResumen ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Resumen
                   </Link>
                 )}
                 {can("ordenes") && (
@@ -139,10 +155,10 @@ export default function Sidebar({
                     Órdenes ML
                   </Link>
                 )}
-                {can("resumen") && (
-                  <Link href="/resumen" className={subLinkClass(isResumen)}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${isResumen ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                    Resumen
+                {can("reposicion") && (
+                  <Link href="/reposicion" className={subLinkClass(isReposicion)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isReposicion ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Reposición
                   </Link>
                 )}
               </div>

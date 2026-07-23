@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const NAV = [
-  { href: "/", module: "inicio", label: "Inicio" },
+  { href: "/dashboard", module: "dashboard", label: "Dashboard" },
+  { href: "/", module: "inicio", label: "Resumen Imp" },
   { href: "/arribos", module: "embarques", label: "Embarques" },
   { href: "/arribos/calculadora", module: "embarques", label: "Calculadora" },
-  { href: "/reposicion", module: "reposicion", label: "Reposición" },
+  { href: "/resumen", module: "resumen", label: "Resumen Vtas" },
   { href: "/ordenes", module: "ordenes", label: "Órdenes ML" },
-  { href: "/resumen", module: "resumen", label: "Resumen" },
+  { href: "/reposicion", module: "reposicion", label: "Reposición" },
   { href: "/admin", module: "admin", label: "Admin" },
 ];
 

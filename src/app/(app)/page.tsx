@@ -60,9 +60,9 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Inicio</h1>
+          <h1 className="text-2xl font-bold text-white">Resumen</h1>
           <p className="mt-1 text-sm text-zinc-400">
-            Resumen general de tus arribos y volúmenes.
+            Resumen general de Importaciones: tus arribos y volúmenes.
           </p>
         </div>
         <NewContainerButton />

@@ -7,11 +7,12 @@ export interface ModuleDef {
 }
 
 export const MODULES: ModuleDef[] = [
-  { key: "inicio", label: "Inicio", path: "/" },
+  { key: "dashboard", label: "Dashboard", path: "/dashboard" },
+  { key: "inicio", label: "Resumen Importaciones", path: "/" },
   { key: "embarques", label: "Importaciones", path: "/arribos" },
-  { key: "reposicion", label: "Reposición", path: "/reposicion" },
-  { key: "ordenes", label: "Órdenes ML", path: "/ordenes" },
   { key: "resumen", label: "Resumen Ventas", path: "/resumen" },
+  { key: "ordenes", label: "Órdenes ML", path: "/ordenes" },
+  { key: "reposicion", label: "Reposición", path: "/reposicion" },
   { key: "admin", label: "Administración", path: "/admin" },
 ];
 
@@ -20,6 +21,7 @@ export const ALL_MODULES = MODULES.map((m) => m.key);
 /** Devuelve la clave de módulo que protege una ruta, o null si es libre. */
 export function moduleForPath(pathname: string): string | null {
   if (pathname === "/") return "inicio";
+  if (pathname.startsWith("/dashboard")) return "dashboard";
   // Buscar SKU es parte de Importaciones (Embarques).
   if (pathname.startsWith("/arribos") || pathname.startsWith("/buscar")) return "embarques";
   if (pathname.startsWith("/reposicion")) return "reposicion";
@@ -31,6 +33,7 @@ export function moduleForPath(pathname: string): string | null {
   if (pathname.startsWith("/api/containers")) return "embarques";
   if (pathname.startsWith("/api/ventas-ml") || pathname.startsWith("/api/costos")) return "ordenes";
   if (pathname.startsWith("/api/resumen")) return "resumen";
+  if (pathname.startsWith("/api/dashboard")) return "dashboard";
   // /api/blob solo emite el token de subida (cualquier sesión); el
   // procesamiento real está protegido por cada endpoint.
   return null;
