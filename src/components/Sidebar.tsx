@@ -58,11 +58,18 @@ export default function Sidebar({
 
   return (
     <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-white/[0.02] backdrop-blur-xl md:flex">
-      <div className="px-6 py-6">
+      <div className="relative overflow-hidden px-5 pb-4 pt-6">
+        {/* Glow sutil de marca detrás del logo */}
+        <div className="pointer-events-none absolute -left-6 -top-8 h-32 w-44 rounded-full bg-teal-500/10 blur-3xl" />
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logo-ma.png" alt="MA Importaciones" className="h-11 w-auto object-contain" />
-        <p className="mt-2 text-xs text-zinc-500">Panel MA</p>
+        <img src="/logo-ma.png" alt="MA Importaciones" className="relative h-10 w-auto object-contain" />
+        <div className="relative mt-3 flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-teal-400 shadow-[0_0_10px_2px_rgba(45,212,191,0.45)]" />
+          <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-zinc-400">Panel MA</span>
+        </div>
       </div>
+      {/* Divisor con degradé de marca */}
+      <div className="mx-5 h-px bg-gradient-to-r from-teal-500/40 via-white/10 to-transparent" />
 
       <nav className="flex-1 space-y-1 px-3 py-2">
         {can("inicio") && (
