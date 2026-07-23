@@ -92,6 +92,8 @@ export async function GET(req: Request) {
   const odooBySku = `(SELECT default_code, MIN(standard_price) standard_price
                       FROM odoo_products GROUP BY default_code)`;
 
+  // ML: se excluyen las órdenes canceladas de la facturación (los únicos estados
+  // son paid / cancelled / partially_refunded; se cuentan paid + partially_refunded).
   const sqlMl = `
     SELECT o.id AS order_id, o.shipping_id, o.total_amount, o.marketplace_fee,
            oi.item_sku AS sku, oi.quantity AS qty,
@@ -102,7 +104,8 @@ export async function GET(req: Request) {
     LEFT JOIN ml_shipments s ON s.id = o.shipping_id
     LEFT JOIN ${odooBySku} p ON p.default_code = oi.item_sku
     LEFT JOIN cost_overrides co ON co.sku = oi.item_sku
-    WHERE substr(o.date_created,1,10) >= '${desde}'
+    WHERE o.status <> 'cancelled'
+      AND substr(o.date_created,1,10) >= '${desde}'
       AND substr(o.date_created,1,10) <= '${hasta}'
     LIMIT ${LIMIT}`;
 
