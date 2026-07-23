@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MA Importaciones · Arribos",
-  description: "Plataforma de gestión de arribos y contenedores",
+  title: "MA Importaciones · Panel",
+  description: "Panel de gestión: importaciones, ventas, reposición y métricas.",
 };
 
 export default function RootLayout({
