@@ -33,7 +33,8 @@ export default function Sidebar({
 
   const isReposicion = pathname.startsWith("/reposicion");
   const isOrdenes = pathname.startsWith("/ordenes");
-  const ventasActive = isReposicion || isOrdenes;
+  const isResumen = pathname.startsWith("/resumen");
+  const ventasActive = isReposicion || isOrdenes || isResumen;
   const [ventasOpen, setVentasOpen] = useState(false);
   const showVentas = ventasOpen || ventasActive;
 
@@ -99,7 +100,7 @@ export default function Sidebar({
           </div>
         )}
 
-        {(can("reposicion") || can("ordenes")) && (
+        {(can("reposicion") || can("ordenes") || can("resumen")) && (
           <div>
             <button
               type="button"
@@ -128,7 +129,13 @@ export default function Sidebar({
                 {can("ordenes") && (
                   <Link href="/ordenes" className={subLinkClass(isOrdenes)}>
                     <span className={`h-1.5 w-1.5 rounded-full ${isOrdenes ? "bg-indigo-400" : "bg-zinc-600"}`} />
-                    Órdenes Real-Time
+                    Órdenes ML
+                  </Link>
+                )}
+                {can("resumen") && (
+                  <Link href="/resumen" className={subLinkClass(isResumen)}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${isResumen ? "bg-indigo-400" : "bg-zinc-600"}`} />
+                    Resumen
                   </Link>
                 )}
               </div>
