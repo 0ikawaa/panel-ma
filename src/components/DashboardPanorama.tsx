@@ -113,31 +113,27 @@ export default function DashboardPanorama() {
   const [prev, setPrev] = useState<{ data: ResumenResp | null; status: number } | null>(null);
   const [imp, setImp] = useState<{ data: ImportResp | null; status: number } | null>(null);
   const [repos, setRepos] = useState<{ data: ReposResp | null; status: number } | null>(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
     const mtd = mtdRange();
     const pm = prevMonthRange();
     const desdeRepos = monthsAgoStr(REPOS_MESES_PERIODO);
-    Promise.all([
-      getJson<ResumenResp>(`/api/resumen?desde=${mtd.desde}&hasta=${mtd.hasta}`),
-      getJson<ResumenResp>(`/api/resumen?desde=${pm.desde}&hasta=${pm.hasta}`),
-      getJson<ImportResp>(`/api/dashboard`),
-      getJson<ReposResp>(`/api/reposicion?desde=${desdeRepos}&hasta=${mtd.hasta}`),
-    ]).then(([c, p, i, r]) => {
-      if (!alive) return;
-      setCur(c);
-      setPrev(p);
-      setImp(i);
-      setRepos(r);
-      setLoading(false);
-    });
+    // Cada fetch actualiza su estado apenas llega: una sección lenta o caída no
+    // bloquea ni oculta a las demás (ej. la tendencia no depende de /api/resumen).
+    getJson<ImportResp>(`/api/dashboard`).then((i) => { if (alive) setImp(i); });
+    getJson<ResumenResp>(`/api/resumen?desde=${mtd.desde}&hasta=${mtd.hasta}`).then((c) => { if (alive) setCur(c); });
+    getJson<ResumenResp>(`/api/resumen?desde=${pm.desde}&hasta=${pm.hasta}`).then((p) => { if (alive) setPrev(p); });
+    getJson<ReposResp>(`/api/reposicion?desde=${desdeRepos}&hasta=${mtd.hasta}`).then((r) => { if (alive) setRepos(r); });
     return () => {
       alive = false;
     };
   }, []);
+
+  // Loading por sección (cada estado es null hasta que su fetch resuelve).
+  const loadingVentas = cur === null;
+  const loadingImp = imp === null;
+  const loadingRepos = repos === null;
 
   const vCur = cur?.data ? deriveVentas(cur.data) : null;
   const vPrev = prev?.data ? deriveVentas(prev.data) : null;
@@ -175,42 +171,48 @@ export default function DashboardPanorama() {
     <div className="space-y-4">
       {/* ---------- KPIs con variación vs mes anterior ---------- */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label={`Facturación · ${MES_LARGO}`} value={vCur ? fmtPeso(vCur.facturado) : "—"} delta={pctChange(vCur?.facturado, vPrev?.facturado)} loading={loading} />
-        <Kpi label="Margen del mes" value={vCur ? fmtPeso(vCur.margen) : "—"} sub={vCur ? `${(vCur.pct * 100).toFixed(0)}% s/ venta` : undefined} delta={pctChange(vCur?.margen, vPrev?.margen)} tone={vCur && vCur.margen < 0 ? "red" : "green"} loading={loading} />
-        <Kpi label="Órdenes del mes" value={vCur ? fmtInt(vCur.ordenes) : "—"} delta={pctChange(vCur?.ordenes, vPrev?.ordenes)} loading={loading} />
-        <Kpi label="Ticket promedio" value={vCur ? fmtPeso(vCur.ticket) : "—"} delta={pctChange(vCur?.ticket, vPrev?.ticket)} loading={loading} />
+        <Kpi label={`Facturación · ${MES_LARGO}`} value={vCur ? fmtPeso(vCur.facturado) : "—"} delta={pctChange(vCur?.facturado, vPrev?.facturado)} loading={loadingVentas} />
+        <Kpi label="Margen del mes" value={vCur ? fmtPeso(vCur.margen) : "—"} sub={vCur ? `${(vCur.pct * 100).toFixed(0)}% s/ venta` : undefined} delta={pctChange(vCur?.margen, vPrev?.margen)} tone={vCur && vCur.margen < 0 ? "red" : "green"} loading={loadingVentas} />
+        <Kpi label="Órdenes del mes" value={vCur ? fmtInt(vCur.ordenes) : "—"} delta={pctChange(vCur?.ordenes, vPrev?.ordenes)} loading={loadingVentas} />
+        <Kpi label="Ticket promedio" value={vCur ? fmtPeso(vCur.ticket) : "—"} delta={pctChange(vCur?.ticket, vPrev?.ticket)} loading={loadingVentas} />
       </div>
 
-      {/* ---------- VENTAS: tendencia + canales ---------- */}
+      {/* ---------- VENTAS: tendencia + canales (cada columna carga por su cuenta) ---------- */}
       <Panel title="Ventas" subtitle="Tendencia y desglose por canal" href="/resumen"
         icon={<><path d="M3 3v18h18" /><path d="M7 14l3-3 3 3 5-6" /></>} accent="from-emerald-500/15"
-        loading={loading} status={cur?.status}>
-        {vCur && (
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* Tendencia 6 meses */}
-            <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Facturación · últimos 6 meses</p>
-              {trend.length > 0 ? (
-                <div className="flex h-40 items-end gap-2">
-                  {trend.map((t, i) => {
-                    const isLast = i === trend.length - 1;
-                    return (
-                      <div key={t.month} className="flex flex-1 flex-col items-center gap-1.5" title={fmtPeso(t.facturado)}>
-                        <div className="flex w-full flex-1 items-end">
-                          <div className={`w-full rounded-t ${isLast ? "brand-gradient" : "bg-white/15"}`} style={{ height: `${Math.max(3, (t.facturado / maxTrend) * 100)}%` }} />
-                        </div>
-                        <span className={`text-[10px] ${isLast ? "font-semibold text-teal-300" : "text-zinc-500"}`}>{monthShort(t.month)}</span>
+        loading={false}>
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Tendencia 6 meses — viene de /api/dashboard, independiente de ventas */}
+          <div>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Facturación · últimos 6 meses</p>
+            {loadingImp ? (
+              <div className="flex h-40 items-center text-sm text-zinc-500">Cargando…</div>
+            ) : trend.length > 0 ? (
+              <div className="flex h-40 items-end gap-2">
+                {trend.map((t, i) => {
+                  const isLast = i === trend.length - 1;
+                  return (
+                    <div key={t.month} className="flex flex-1 flex-col items-center gap-1.5" title={fmtPeso(t.facturado)}>
+                      <div className="flex w-full flex-1 items-end">
+                        <div className={`w-full rounded-t ${isLast ? "brand-gradient" : "bg-white/15"}`} style={{ height: `${Math.max(3, (t.facturado / maxTrend) * 100)}%` }} />
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="flex h-40 items-center text-sm text-zinc-600">Sin datos de tendencia.</div>
-              )}
-            </div>
-            {/* Canales */}
-            <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Por canal · {MES_LARGO}</p>
+                      <span className={`text-[10px] ${isLast ? "font-semibold text-teal-300" : "text-zinc-500"}`}>{monthShort(t.month)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex h-40 items-center text-sm text-zinc-600">
+                {imp && imp.status !== 200 ? "No se pudo cargar la tendencia." : "Sin datos de tendencia."}
+              </div>
+            )}
+          </div>
+          {/* Canales — viene de /api/resumen */}
+          <div>
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500">Por canal · {MES_LARGO}</p>
+            {loadingVentas ? (
+              <div className="flex h-40 items-center text-sm text-zinc-500">Cargando…</div>
+            ) : vCur ? (
               <div className="space-y-2.5">
                 {vCur.porCanal.map((c) => {
                   const pc = vPrev?.porCanal.find((x) => x.key === c.key);
@@ -227,16 +229,20 @@ export default function DashboardPanorama() {
                   );
                 })}
               </div>
-            </div>
+            ) : (
+              <div className="flex h-40 items-center text-sm text-zinc-600">
+                {cur?.status === 403 ? "No tenés acceso a ventas." : "No se pudieron cargar los canales."}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </Panel>
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* ---------- IMPORTACIONES ---------- */}
         <Panel title="Importaciones" subtitle="Contenedores y mercadería en tránsito" href="/"
           icon={<><path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /><path d="M3 7l2-3h14l2 3M9 7v12M15 7v12" /></>}
-          accent="from-indigo-500/15" loading={loading} status={imp?.status}>
+          accent="from-indigo-500/15" loading={loadingImp} status={imp?.status}>
           {imp?.data && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -260,7 +266,7 @@ export default function DashboardPanorama() {
         {/* ---------- REPOSICIÓN ---------- */}
         <Panel title="Reposición" subtitle={`Sugerido · ${REPOS_MESES}m de cobertura`} href="/reposicion"
           icon={<><path d="M3 3v18h18M7 14l3-3 3 3 5-6" /></>} accent="from-teal-500/15"
-          loading={loading} status={repos?.status}>
+          loading={loadingRepos} status={repos?.status}>
           {reposCalc && (
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
