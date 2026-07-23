@@ -20,13 +20,13 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user, password }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         setError(data.error ?? "No se pudo iniciar sesión");
         setLoading(false);
         return;
       }
-      router.replace("/arribos");
+      router.replace(data.redirect ?? "/dashboard");
       router.refresh();
     } catch {
       setError("Error de conexión");

@@ -191,11 +191,13 @@ export default function DashboardPanorama() {
               <div className="flex h-40 items-end gap-2">
                 {trend.map((t, i) => {
                   const isLast = i === trend.length - 1;
+                  // Altura en px (no %): el % no resuelve dentro de un flex-col sin
+                  // altura definida y las barras quedaban colapsadas. 144px ≈ alto
+                  // útil de la columna (h-40 = 160px menos la etiqueta).
+                  const h = Math.max(4, Math.round((t.facturado / maxTrend) * 144));
                   return (
-                    <div key={t.month} className="flex flex-1 flex-col items-center gap-1.5" title={fmtPeso(t.facturado)}>
-                      <div className="flex w-full flex-1 items-end">
-                        <div className={`w-full rounded-t ${isLast ? "brand-gradient" : "bg-white/15"}`} style={{ height: `${Math.max(3, (t.facturado / maxTrend) * 100)}%` }} />
-                      </div>
+                    <div key={t.month} className="flex flex-1 flex-col items-center justify-end gap-1.5" title={fmtPeso(t.facturado)}>
+                      <div className={`w-full rounded-t ${isLast ? "brand-gradient" : "bg-white/15"}`} style={{ height: `${h}px` }} />
                       <span className={`text-[10px] ${isLast ? "font-semibold text-teal-300" : "text-zinc-500"}`}>{monthShort(t.month)}</span>
                     </div>
                   );

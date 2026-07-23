@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AUTH_COOKIE, createSessionToken, SESSION_MAX_AGE } from "@/lib/auth";
 import { authenticate } from "@/lib/users";
+import { firstAllowedPath } from "@/lib/modules";
 
 export const runtime = "nodejs";
 
@@ -24,7 +25,10 @@ export async function POST(req: Request) {
   }
 
   const token = await createSessionToken(session);
-  const res = NextResponse.json({ ok: true });
+  // Destino tras loguear: Dashboard primero (es el primero en MODULES); si el
+  // usuario no tiene ese módulo, firstAllowedPath cae al siguiente que sí tenga.
+  const redirect = session.isAdmin ? "/dashboard" : firstAllowedPath(session.modules);
+  const res = NextResponse.json({ ok: true, redirect });
   res.cookies.set(AUTH_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
