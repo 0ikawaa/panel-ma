@@ -140,12 +140,12 @@ export default function Calculadora() {
       {/* Resultado */}
       <div className="card flex flex-col p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-          Costo final por unidad (nacionalizado, IVA inc.)
+          Costo final por unidad (nacionalizado)
         </p>
 
         {lc ? (
           <>
-            <p className="mt-2 text-4xl font-bold text-teal-300">{fmtUSD(lc.final)}</p>
+            <p className="mt-2 text-4xl font-bold text-teal-300">{fmtUSD(lc.nacionalizado)}</p>
 
             <div className="mt-6 space-y-2.5 border-t border-white/10 pt-5 text-sm">
               {origin === "china" ? (
@@ -153,14 +153,14 @@ export default function Calculadora() {
                   <Row label="FOB" value={fmtUSD(lc.fob)} />
                   <Row label="+ Flete unitario" value={fmtUSD(lc.fleteUnitario)} />
                   <Row label="= Base" value={fmtUSD(lc.base)} strong />
-                  <Row label={`× ${lc.incidencia} (nacionalización)`} value={fmtUSD(lc.nacionalizado)} />
-                  <Row label={`× ${IVA} (IVA)`} value={fmtUSD(lc.final)} strong accent />
+                  <Row label={`× ${lc.incidencia} (nacionalización)`} value={fmtUSD(lc.nacionalizado)} strong accent />
+                  <Row label={`+ IVA (${IVA})`} value={`(${fmtUSD(lc.final)} IVA inc.)`} />
                 </>
               ) : (
                 <>
                   <Row label="Precio origen" value={fmtUSD(lc.fob)} />
-                  <Row label={`× ${lc.incidencia} (nacionalización)`} value={fmtUSD(lc.nacionalizado)} />
-                  <Row label={`× ${IVA} (IVA)`} value={fmtUSD(lc.final)} strong accent />
+                  <Row label={`× ${lc.incidencia} (nacionalización)`} value={fmtUSD(lc.nacionalizado)} strong accent />
+                  <Row label={`+ IVA (${IVA})`} value={`(${fmtUSD(lc.final)} IVA inc.)`} />
                 </>
               )}
             </div>
