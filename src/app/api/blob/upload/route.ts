@@ -27,6 +27,11 @@ export async function POST(req: Request): Promise<NextResponse> {
             "application/vnd.ms-excel",
             "application/vnd.ms-excel.sheet.macroEnabled.12",
             "application/octet-stream",
+            // Fotos de perfil.
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/gif",
           ],
           maximumSizeInBytes: 50 * 1024 * 1024, // 50 MB
         };

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 
 const importIcon = (
   <>
@@ -15,12 +16,74 @@ export default function Sidebar({
   modules,
   isAdmin,
   name,
+  photoUrl,
 }: {
   modules: string[];
   isAdmin: boolean;
   name?: string;
+  photoUrl?: string;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  // Foto de perfil: estado optimista + subida a Blob.
+  const [photo, setPhoto] = useState<string | undefined>(photoUrl);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function onPickPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite re-elegir el mismo archivo
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Elegí una imagen.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError("La imagen supera 5 MB.");
+      return;
+    }
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const blob = await uploadToBlob(`avatar-${Date.now()}-${file.name}`, file, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+        contentType: file.type,
+      });
+      const res = await fetch("/api/profile/photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: blob.url }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || `Error ${res.status}`);
+      }
+      setPhoto(blob.url);
+      router.refresh(); // refresca la sesión (nueva cookie con la foto)
+    } catch (err) {
+      setPhotoError((err as Error).message || "No se pudo subir la foto.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function removePhoto() {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const res = await fetch("/api/profile/photo", { method: "DELETE" });
+      if (!res.ok) throw new Error(`Error ${res.status}`);
+      setPhoto(undefined);
+      router.refresh();
+    } catch (err) {
+      setPhotoError((err as Error).message || "No se pudo quitar la foto.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
   const can = (m: string) => isAdmin || modules.includes(m);
 
   const isDashboard = pathname.startsWith("/dashboard");
@@ -182,12 +245,44 @@ export default function Sidebar({
       <div className="border-t border-white/10 p-3">
         {name && (
           <div className="mb-1 flex items-center gap-2.5 px-3 py-2">
-            <div className="brand-gradient flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white">
-              {name.slice(0, 1).toUpperCase()}
-            </div>
-            <div className="min-w-0">
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickPhoto} />
+            <button
+              type="button"
+              onClick={() => !photoBusy && fileRef.current?.click()}
+              className="group/av relative h-9 w-9 shrink-0 overflow-hidden rounded-full"
+              title="Cambiar foto de perfil"
+              disabled={photoBusy}
+            >
+              {photo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photo} alt={name} className="h-full w-full object-cover" />
+              ) : (
+                <span className="brand-gradient flex h-full w-full items-center justify-center text-xs font-bold text-white">
+                  {name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover/av:opacity-100">
+                {photoBusy ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4 animate-spin text-white"><path d="M21 12a9 9 0 1 1-2.64-6.36" strokeLinecap="round" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-4 w-4 text-white"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="13" r="4" /></svg>
+                )}
+              </span>
+            </button>
+            <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-white">{name}</p>
-              <p className="text-xs text-zinc-500">Sesión iniciada</p>
+              {photoError ? (
+                <p className="truncate text-xs text-red-400" title={photoError}>{photoError}</p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => (photo ? removePhoto() : fileRef.current?.click())}
+                  disabled={photoBusy}
+                  className="text-xs text-zinc-500 transition hover:text-zinc-300 disabled:opacity-60"
+                >
+                  {photoBusy ? "Subiendo…" : photo ? "Quitar foto" : "Agregar foto"}
+                </button>
+              )}
             </div>
           </div>
         )}

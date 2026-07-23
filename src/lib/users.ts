@@ -20,6 +20,7 @@ export async function authenticate(
       name: "Matias",
       modules: [...ALL_MODULES],
       isAdmin: true,
+      photoUrl: await photoOf(username),
     };
   }
 
@@ -38,7 +39,16 @@ export async function authenticate(
     name: u.name ?? undefined,
     modules: u.modules,
     isAdmin: false,
+    photoUrl: await photoOf(u.username),
   };
+}
+
+/** Foto de perfil guardada para un usuario (o undefined si no tiene). */
+async function photoOf(username: string): Promise<string | undefined> {
+  const p = await prisma.profile
+    .findUnique({ where: { username }, select: { photoUrl: true } })
+    .catch(() => null);
+  return p?.photoUrl ?? undefined;
 }
 
 export async function hashPassword(password: string): Promise<string> {

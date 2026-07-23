@@ -91,3 +91,11 @@ model User {
   lastLoginAt  DateTime? // Último acceso exitoso
   createdAt    DateTime @default(now())
 }
+
+/// Preferencias de perfil por usuario (ej. foto). Separado de User para que
+/// también valga para el superadmin, que no tiene fila en User.
+model Profile {
+  username  String   @id // coincide con SessionData.user
+  photoUrl  String? // URL de la foto de perfil (Vercel Blob)
+  updatedAt DateTime @updatedAt
+}

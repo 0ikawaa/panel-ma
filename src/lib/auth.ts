@@ -8,6 +8,7 @@ export interface SessionData {
   name?: string;
   modules: string[];
   isAdmin: boolean; // superadmin (acceso total)
+  photoUrl?: string; // foto de perfil (Vercel Blob)
 }
 
 function getSecretKey() {
@@ -23,6 +24,7 @@ export async function createSessionToken(data: SessionData): Promise<string> {
     name: data.name ?? null,
     modules: data.modules,
     isAdmin: data.isAdmin,
+    photoUrl: data.photoUrl ?? null,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -42,6 +44,7 @@ export async function verifySessionToken(
       name: (payload.name as string | null) ?? undefined,
       modules: (payload.modules as string[] | undefined) ?? [],
       isAdmin: !!payload.isAdmin,
+      photoUrl: (payload.photoUrl as string | null) ?? undefined,
     };
   } catch {
     return null;
