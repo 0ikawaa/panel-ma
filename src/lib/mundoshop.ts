@@ -40,35 +40,93 @@ const baseOf = (sku: string) => sku.split(/[-\s/]/)[0].trim();
 
 export type MlPhotoMaps = { bySku: Map<string, string>; byBase: Map<string, string> };
 
+// El mapa de fotos es caro de armar (pagina el live de ML), así que se cachea en
+// memoria: las fotos casi no cambian y ML sincroniza cada 2 min. Un guard "in
+// flight" evita que varios endpoints lo reconstruyan a la vez en un cold start.
+let _photoCache: { at: number; maps: MlPhotoMaps } | null = null;
+let _photoInFlight: Promise<MlPhotoMaps> | null = null;
+const PHOTO_TTL_MS = 20 * 60 * 1000; // 20 min
+
 /**
- * Mapa SKU → foto principal de MercadoLibre (thumbnail). La foto vive por
- * `item_id` en `ml_item_sales`; se la asocia al SKU con el puente item_id→item_sku
- * de `ml_order_items`. Cubre las publicaciones que alguna vez vendieron (~580 SKUs).
- * Si falla, devuelve mapas vacíos (las fotos son opcionales, no deben romper nada).
+ * Mapa SKU → foto principal de MercadoLibre (thumbnail), asociando la foto al SKU
+ * con el puente item_id→item_sku de `ml_order_items`. La foto por `item_id` sale
+ * de las publicaciones LIVE (activas + pausadas, mejor cobertura) y, como respaldo
+ * para publicaciones cerradas, de `ml_item_sales`. Cacheado en memoria; nunca
+ * lanza (si algo falla devuelve lo que haya, o mapas vacíos).
  */
-export async function mlPhotoMap(timeoutMs = 20000): Promise<MlPhotoMaps> {
-  const sql = `
-    SELECT oi.item_sku AS sku, MAX(s.thumbnail) AS thumb
-    FROM ml_order_items oi
-    JOIN ml_item_sales s ON s.item_id = oi.item_id
-    WHERE oi.item_sku IS NOT NULL AND oi.item_sku <> ''
-      AND s.thumbnail IS NOT NULL AND s.thumbnail <> ''
-    GROUP BY oi.item_sku`;
+export async function mlPhotoMap(timeoutMs = 25000): Promise<MlPhotoMaps> {
+  if (_photoCache && Date.now() - _photoCache.at < PHOTO_TTL_MS) return _photoCache.maps;
+  if (_photoInFlight) return _photoInFlight;
+  _photoInFlight = buildPhotoMap(timeoutMs)
+    .then((maps) => {
+      _photoCache = { at: Date.now(), maps };
+      return maps;
+    })
+    .catch(() => _photoCache?.maps ?? { bySku: new Map<string, string>(), byBase: new Map<string, string>() })
+    .finally(() => {
+      _photoInFlight = null;
+    });
+  return _photoInFlight;
+}
+
+async function buildPhotoMap(timeoutMs: number): Promise<MlPhotoMaps> {
   const bySku = new Map<string, string>();
   const byBase = new Map<string, string>();
-  let rows: Row[];
+
+  // Puente item_id→SKU + respaldo de fotos de ml_item_sales (BD, rápido).
+  let bridgeRows: Row[];
+  let salesRows: Row[];
   try {
-    rows = await msQuery(sql, timeoutMs);
+    [bridgeRows, salesRows] = await Promise.all([
+      msQuery(`SELECT DISTINCT item_id, item_sku FROM ml_order_items WHERE item_sku IS NOT NULL AND item_sku <> ''`, timeoutMs),
+      msQuery(`SELECT item_id, MAX(thumbnail) AS thumb FROM ml_item_sales WHERE thumbnail IS NOT NULL AND thumbnail <> '' GROUP BY item_id`, timeoutMs),
+    ]);
   } catch {
-    return { bySku, byBase };
+    return { bySku, byBase }; // sin puente no hay forma de asociar fotos a SKU
   }
-  for (const r of rows) {
-    const sku = String(r.sku);
-    const thumb = httpsUrl(String(r.thumb));
-    if (!thumb) continue;
-    bySku.set(sku, thumb);
+
+  // Foto por item_id: primero el respaldo de ml_item_sales…
+  const thumbByItem = new Map<string, string>();
+  for (const r of salesRows) {
+    const t = httpsUrl(String(r.thumb));
+    if (t) thumbByItem.set(String(r.item_id), t);
+  }
+  // …y luego las publicaciones live (activas + pausadas), que pisan al respaldo y
+  // cubren casi todo lo que se vende. Si el live falla, se sigue con ml_item_sales.
+  const liveIds = new Set<string>();
+  try {
+    const [act, pau, clo] = await Promise.all([
+      msListAllItems("active", { timeoutMs }),
+      msListAllItems("paused", { timeoutMs }),
+      msListAllItems("closed", { timeoutMs }),
+    ]);
+    for (const it of [...act.items, ...pau.items, ...clo.items]) {
+      const t = httpsUrl(it.thumbnail);
+      if (t) {
+        thumbByItem.set(it.id, t);
+        liveIds.add(it.id);
+      }
+    }
+  } catch {
+    /* sin live: coberura reducida, no rompe */
+  }
+
+  // SKU → foto, prefiriendo la de una publicación live (activa/pausada) por sobre
+  // la del respaldo cuando un SKU tiene varias publicaciones.
+  const isLiveSku = new Map<string, boolean>();
+  for (const r of bridgeRows) {
+    const sku = String(r.item_sku);
+    const t = thumbByItem.get(String(r.item_id));
+    if (!t) continue;
+    const live = liveIds.has(String(r.item_id));
+    if (!bySku.has(sku) || (live && !isLiveSku.get(sku))) {
+      bySku.set(sku, t);
+      isLiveSku.set(sku, live);
+    }
+  }
+  for (const [sku, t] of bySku) {
     const b = baseOf(sku);
-    if (!byBase.has(b)) byBase.set(b, thumb);
+    if (!byBase.has(b)) byBase.set(b, t);
   }
   return { bySku, byBase };
 }
