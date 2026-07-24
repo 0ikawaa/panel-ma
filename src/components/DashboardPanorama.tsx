@@ -256,14 +256,22 @@ export default function DashboardPanorama() {
                 {vCur.porCanal.map((c) => {
                   const pc = vPrev?.porCanal.find((x) => x.key === c.key);
                   return (
-                    <div key={c.key} className="flex items-center gap-2 text-sm">
-                      <span className="w-24 shrink-0 text-zinc-300">{CH_META[c.key].label}</span>
-                      <div className="h-2 flex-1 overflow-hidden rounded bg-white/5">
+                    <div key={c.key} className="text-sm sm:flex sm:items-center sm:gap-2">
+                      {/* En celular el importe va arriba de la barra; en desktop, a la derecha. */}
+                      <div className="flex items-baseline justify-between gap-2 sm:block sm:w-24 sm:shrink-0">
+                        <span className="text-zinc-300">{CH_META[c.key].label}</span>
+                        <span className="flex items-baseline gap-2 sm:hidden">
+                          <span className="tabular-nums text-zinc-200">{fmtPeso(c.facturado)}</span>
+                          <span className={`text-xs tabular-nums ${c.pct < 0 ? "text-red-400" : "text-emerald-400"}`}>{(c.pct * 100).toFixed(0)}%</span>
+                          <DeltaChip pct={pctChange(c.facturado, pc?.facturado)} small />
+                        </span>
+                      </div>
+                      <div className="mt-1 h-2 overflow-hidden rounded bg-white/5 sm:mt-0 sm:flex-1">
                         <div className={`h-full ${CH_META[c.key].bar}`} style={{ width: `${(c.facturado / maxCanal) * 100}%` }} />
                       </div>
-                      <span className="w-20 shrink-0 text-right tabular-nums text-zinc-200">{fmtPeso(c.facturado)}</span>
-                      <span className={`w-12 shrink-0 text-right tabular-nums text-xs ${c.pct < 0 ? "text-red-400" : "text-emerald-400"}`}>{(c.pct * 100).toFixed(0)}%</span>
-                      <span className="w-12 shrink-0 text-right"><DeltaChip pct={pctChange(c.facturado, pc?.facturado)} small /></span>
+                      <span className="hidden w-20 shrink-0 text-right tabular-nums text-zinc-200 sm:block">{fmtPeso(c.facturado)}</span>
+                      <span className={`hidden w-12 shrink-0 text-right text-xs tabular-nums sm:block ${c.pct < 0 ? "text-red-400" : "text-emerald-400"}`}>{(c.pct * 100).toFixed(0)}%</span>
+                      <span className="hidden w-12 shrink-0 text-right sm:block"><DeltaChip pct={pctChange(c.facturado, pc?.facturado)} small /></span>
                     </div>
                   );
                 })}
@@ -292,10 +300,10 @@ export default function DashboardPanorama() {
               </div>
               {imp.data.proximoArribo && (
                 <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5 text-sm">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4 text-indigo-300"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  <span className="text-zinc-400">Próximo arribo:</span>
-                  <span className="font-semibold text-zinc-100">{imp.data.proximoArribo.name}</span>
-                  <span className="ml-auto tabular-nums text-zinc-400">{fmtDate(imp.data.proximoArribo.eta)}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4 shrink-0 text-indigo-300"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <span className="hidden shrink-0 text-zinc-400 sm:inline">Próximo arribo:</span>
+                  <span className="min-w-0 truncate font-semibold text-zinc-100">{imp.data.proximoArribo.name}</span>
+                  <span className="ml-auto shrink-0 tabular-nums text-zinc-400">{fmtDate(imp.data.proximoArribo.eta)}</span>
                 </div>
               )}
             </div>
@@ -308,7 +316,7 @@ export default function DashboardPanorama() {
           loading={loadingRepos} status={repos?.status}>
           {reposCalc && (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Stat label="SKUs a reponer" value={fmtInt(reposCalc.skus)} />
                 <Stat label="Unidades" value={fmtInt(reposCalc.unidades)} />
                 <Stat label="Valor (USD)" value={fmtUSD(reposCalc.valor)} tone="green" sub={`${reposCalc.conCosto}/${reposCalc.skus} con costo`} />
@@ -354,13 +362,13 @@ function DeltaChip({ pct, small }: { pct: number | null; small?: boolean }) {
 function Kpi({ label, value, sub, delta, tone, loading }: { label: string; value: string; sub?: string; delta?: number | null; tone?: "red" | "green"; loading?: boolean }) {
   const color = tone === "red" ? "text-red-400" : tone === "green" ? "text-emerald-400" : "text-white";
   return (
-    <div className="card p-4">
-      <div className="truncate text-xs text-zinc-500" title={label}>{label}</div>
-      <div className={`mt-0.5 text-2xl font-bold tabular-nums ${color}`}>{loading ? "…" : value}</div>
-      <div className="mt-1 flex items-center gap-2">
+    <div className="card p-3 sm:p-4">
+      <div className="truncate text-[11px] text-zinc-500 sm:text-xs" title={label}>{label}</div>
+      <div className={`mt-0.5 text-xl font-bold tabular-nums sm:text-2xl ${color}`}>{loading ? "…" : value}</div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2">
         {delta != null && <DeltaChip pct={delta} />}
         {sub && <span className="text-[11px] text-zinc-500">{sub}</span>}
-        {delta != null && <span className="text-[11px] text-zinc-600">vs mes ant.</span>}
+        {delta != null && <span className="hidden text-[11px] text-zinc-600 sm:inline">vs mes ant.</span>}
       </div>
     </div>
   );
@@ -372,7 +380,7 @@ function Panel({ title, subtitle, href, icon, accent, loading, status, children 
   const denied = status === 403;
   const failed = !loading && status !== undefined && status !== 200 && status !== 403;
   return (
-    <div className="card relative overflow-hidden p-5">
+    <div className="card relative overflow-hidden p-4 sm:p-5">
       <div className={`pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br ${accent} to-transparent blur-2xl`} />
       <div className="relative mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
@@ -380,11 +388,11 @@ function Panel({ title, subtitle, href, icon, accent, loading, status, children 
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">{icon}</svg>
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">{title}</h2>
+            <h2 className="text-base font-bold text-white sm:text-lg">{title}</h2>
             <p className="text-xs text-zinc-500">{subtitle}</p>
           </div>
         </div>
-        <Link href={href} className="text-sm font-semibold text-indigo-400 transition hover:text-indigo-300">Ver detalle →</Link>
+        <Link href={href} className="shrink-0 text-xs font-semibold text-indigo-400 transition hover:text-indigo-300 sm:text-sm">Ver detalle →</Link>
       </div>
       <div className="relative">
         {loading ? (
@@ -406,7 +414,7 @@ function Stat({ label, value, tone, sub }: { label: string; value: string; tone?
   return (
     <div>
       <div className="text-xs text-zinc-500">{label}</div>
-      <div className={`text-xl font-bold tabular-nums ${color}`}>{value}</div>
+      <div className={`text-lg font-bold tabular-nums sm:text-xl ${color}`}>{value}</div>
       {sub && <div className="mt-0.5 text-[11px] text-zinc-500">{sub}</div>}
     </div>
   );

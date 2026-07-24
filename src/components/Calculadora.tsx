@@ -47,7 +47,7 @@ export default function Calculadora() {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       {/* Entradas */}
-      <div className="card space-y-5 p-6">
+      <div className="card space-y-5 p-4 sm:p-6">
         <div>
           <label className="mb-2 block text-sm font-medium text-zinc-300">Origen</label>
           <div className="grid grid-cols-2 gap-2">
@@ -139,7 +139,7 @@ export default function Calculadora() {
       </div>
 
       {/* Resultado */}
-      <div className="card flex flex-col p-6">
+      <div className="card flex flex-col p-4 sm:p-6">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
           Costo final por unidad (nacionalizado)
         </p>

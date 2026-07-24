@@ -225,12 +225,12 @@ export default function EmbarquesBoard({ initial }: { initial: BoardContainer[] 
 
       {/* Panel de detalle */}
       {abierto && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-stretch sm:justify-end">
           <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setOpenId(null)}
           />
-          <div className="animate-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-white/10 bg-[var(--surface)] p-5 shadow-2xl">
+          <div className="animate-in relative flex max-h-[90vh] w-full flex-col overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[var(--surface)] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl sm:h-full sm:max-h-none sm:max-w-md sm:rounded-none sm:border-l sm:border-t-0 sm:p-5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="truncate text-lg font-bold text-white">{abierto.name}</h2>

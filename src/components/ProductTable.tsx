@@ -125,7 +125,135 @@ export default function ProductTable({
 
   return (
     <>
-      <div className="card overflow-x-auto">
+      {/* ---------- Lista (celular) ---------- */}
+      <div className="space-y-2.5 lg:hidden">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Ordenar</span>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="field !w-auto !py-1.5 text-sm"
+          >
+            <option value="rowIndex">Orden del Excel</option>
+            <option value="codigo">Código</option>
+            <option value="unidades">Unidades</option>
+            <option value="precioChina">Precio unit.</option>
+            <option value="montoTotal">Precio lote</option>
+          </select>
+          <button
+            onClick={() => setAsc((v) => !v)}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition active:bg-white/10"
+            aria-label="Invertir orden"
+          >
+            {asc ? "▲" : "▼"}
+          </button>
+        </div>
+
+        {sorted.map((p) => {
+          const expandable = hasDetail(p);
+          const isOpen = expanded.has(p.id);
+          const cbmU = cbmPorUnidad(p.cbmUnitario, p.cantidadPorCaja);
+          const lc = landedCost(origin as Origin, p.precioChina, cbmU, freightCost);
+          return (
+            <div key={p.id} className="card p-3">
+              <div
+                className={expandable ? "cursor-pointer" : ""}
+                onClick={() => expandable && toggleRow(p.id)}
+              >
+                <div className="flex items-start gap-3">
+                  {p.photo ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLightbox(p.photo);
+                      }}
+                      className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.photo}
+                        alt={p.codigo ?? "Producto"}
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border border-dashed border-white/10 bg-white/5 text-zinc-600">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-6 w-6">
+                        <path d="M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="8.5" cy="9" r="1.5" />
+                      </svg>
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-semibold text-zinc-100">
+                        {p.codigo ?? <span className="text-zinc-600">—</span>}
+                      </span>
+                      {canEdit && <span onClick={(e) => e.stopPropagation()}><EditProductButton product={p} /></span>}
+                      {expandable && (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={2.2}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`ml-auto h-4 w-4 shrink-0 text-zinc-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                        >
+                          <path d="m9 18 6-6-6-6" />
+                        </svg>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
+                      <span className="tabular-nums text-zinc-300">{fmtInt(p.unidades)}</span>
+                      <span>{p.unidad ?? "u."}</span>
+                      <span className="text-zinc-700">·</span>
+                      <span>CBM u. <span className="tabular-nums text-zinc-400">{fmtCBM(cbmU)}</span></span>
+                      {expandable && (
+                        <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-semibold text-teal-300">
+                          detalle
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-500">Precio u.</div>
+                    <div className="text-sm font-bold tabular-nums text-red-400">{fmtUSD(p.precioChina)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-500">Precio lote</div>
+                    <div className="text-sm font-semibold tabular-nums text-zinc-200">{fmtUSD(p.montoTotal)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-wide text-teal-300/80">Costo final /u</div>
+                    <div className="text-sm font-bold tabular-nums text-teal-300">
+                      {lc ? fmtUSD(lc.final) : <span className="font-normal text-zinc-600">—</span>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {isOpen && expandable && <div className="mt-2"><DetallePanel p={p} lc={lc} /></div>}
+            </div>
+          );
+        })}
+
+        <div className="card flex items-center justify-between gap-3 p-3 text-sm font-semibold text-white">
+          <span>{totals.items} ítems</span>
+          <span className="tabular-nums">{fmtInt(totals.unidades)} u.</span>
+          <span className="tabular-nums text-teal-400">{fmtCBM2(totals.cbmTotal)}</span>
+          <span className="tabular-nums text-zinc-200">{fmtUSD(totals.monto)}</span>
+        </div>
+      </div>
+
+      {/* ---------- Tabla (desktop) ---------- */}
+      <div className="card hidden overflow-x-auto lg:block">
         <table className="w-full min-w-[860px] border-collapse text-sm">
           <thead className="border-b border-white/10 bg-white/[0.03]">
             <tr>

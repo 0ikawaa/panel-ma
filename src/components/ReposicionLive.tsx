@@ -196,42 +196,46 @@ export default function ReposicionLive() {
   return (
     <div className="space-y-4">
       {/* ---------- Toolbar: período + parámetros ---------- */}
-      <div className="card flex flex-wrap items-end gap-3 p-4">
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Ventas desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field" />
-        </div>
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field" />
-        </div>
-        <div className="flex gap-1">
-          <button onClick={() => setUlt(3)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">3m</button>
-          <button onClick={() => setUlt(6)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">6m</button>
-          <button onClick={() => setUlt(12)} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">12m</button>
-        </div>
-        <button onClick={fetchData} disabled={loading} className="brand-gradient brand-glow rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60">
-          {loading ? "Cargando…" : "Actualizar"}
-        </button>
+      <div className="card space-y-3 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="grid grid-cols-2 gap-2 lg:flex lg:items-end">
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Ventas desde</label>
+              <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
+              <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => setUlt(3)} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">3m</button>
+            <button onClick={() => setUlt(6)} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">6m</button>
+            <button onClick={() => setUlt(12)} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">12m</button>
+            <button onClick={fetchData} disabled={loading} className="brand-gradient brand-glow flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60 lg:flex-none">
+              {loading ? "Cargando…" : "Actualizar"}
+            </button>
+          </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-1.5 text-sm text-zinc-400" title="Meses de venta que querés tener en stock">
-            Meses a cubrir
-            <input type="number" min={0} step={0.5} value={meses}
-              onChange={(e) => setMeses(Math.max(0, Number(e.target.value) || 0))}
-              className="field !w-16 !py-1.5 text-center" />
-          </label>
-          <button
-            onClick={() => setDescontarCamino((v) => !v)}
-            title="Restar de la sugerencia lo que ya viene en contenedores (puede no estar actualizado)"
-            className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-              descontarCamino
-                ? "border-teal-400/40 bg-teal-500/15 text-teal-200"
-                : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
-            }`}
-          >
-            Descontar en camino
-          </button>
+          <div className="flex flex-wrap items-center gap-3 lg:ml-auto lg:gap-4">
+            <label className="flex items-center gap-1.5 text-sm text-zinc-400" title="Meses de venta que querés tener en stock">
+              Meses a cubrir
+              <input type="number" min={0} step={0.5} value={meses}
+                onChange={(e) => setMeses(Math.max(0, Number(e.target.value) || 0))}
+                className="field !w-16 !py-1.5 text-center" />
+            </label>
+            <button
+              onClick={() => setDescontarCamino((v) => !v)}
+              title="Restar de la sugerencia lo que ya viene en contenedores (puede no estar actualizado)"
+              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                descontarCamino
+                  ? "border-teal-400/40 bg-teal-500/15 text-teal-200"
+                  : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"
+              }`}
+            >
+              Descontar en camino
+            </button>
+          </div>
         </div>
       </div>
 
@@ -256,7 +260,7 @@ export default function ReposicionLive() {
 
       {/* ---------- Filtros de tabla ---------- */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[200px] flex-1">
+        <div className="relative w-full flex-1 sm:min-w-[200px] sm:w-auto">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-zinc-500">
             <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
           </svg>
@@ -278,8 +282,81 @@ export default function ReposicionLive() {
         </button>
       </div>
 
-      {/* ---------- Tabla ---------- */}
-      <div className="card overflow-x-auto">
+      {/* ---------- Lista (celular) ---------- */}
+      <div className="space-y-2.5 lg:hidden">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500">Ordenar</span>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="field !w-auto !py-1.5 text-sm"
+          >
+            <option value="sugerida">Reponer</option>
+            <option value="sku">Código</option>
+            <option value="vendidas">Vendidas</option>
+            <option value="promMes">Prom/mes</option>
+            <option value="stock">Stock</option>
+            <option value="enCamino">En camino</option>
+            <option value="valor">Valor USD</option>
+          </select>
+          <button
+            onClick={() => setAsc((v) => !v)}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition active:bg-white/10"
+            aria-label="Invertir orden"
+          >
+            {asc ? "▲" : "▼"}
+          </button>
+        </div>
+
+        {filtered.map((r) => (
+          <div key={r.sku} className="card p-3">
+            <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">
+              {r.titulo ?? <span className="text-zinc-600">—</span>}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+              <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300">{r.sku}</span>
+              <span className="text-zinc-500">{fmtInt(r.vendidas)} vendidas · {fmtDec(r.promMes, 1)}/mes</span>
+            </div>
+            <div className="mt-2.5 grid grid-cols-4 gap-2 border-t border-white/5 pt-2.5">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Stock</div>
+                <div className="text-sm font-semibold tabular-nums text-zinc-300">
+                  {r.stock === null ? <span className="text-zinc-600">—</span> : fmtInt(r.stock)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Camino</div>
+                <div className={`text-sm font-semibold tabular-nums ${r.enCamino > 0 ? "text-sky-300" : "text-zinc-600"}`}>
+                  {r.enCamino > 0 ? fmtInt(r.enCamino) : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-teal-300/80">Reponer</div>
+                <div className="text-sm font-bold tabular-nums">
+                  {r.sugerida > 0 ? <span className="text-teal-300">{fmtInt(r.sugerida)}</span> : <span className="text-zinc-600">0</span>}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Valor USD</div>
+                <div className="text-sm font-semibold tabular-nums text-zinc-300">
+                  {r.valor != null ? fmtUsd(r.valor) : <span className="text-amber-400/70" title="Sin costo de origen cargado">s/c</span>}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && !loading && (
+          <div className="card px-4 py-10 text-center text-sm text-zinc-500">No hay resultados en este rango.</div>
+        )}
+        <div className="card flex items-center justify-between gap-2 p-3 text-sm font-semibold text-white">
+          <span>{fmtInt(totals.skus)} SKUs</span>
+          <span className="tabular-nums text-teal-300">{fmtInt(totals.unidades)} u.</span>
+          <span className="tabular-nums">{fmtUsd(totals.valor)}</span>
+        </div>
+      </div>
+
+      {/* ---------- Tabla (desktop) ---------- */}
+      <div className="card hidden overflow-x-auto lg:block">
         <table className="w-full border-collapse text-sm">
           <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-400">
             <tr>
@@ -342,9 +419,9 @@ export default function ReposicionLive() {
 // ---------- Subcomponentes ----------
 function Kpi({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card p-4">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className="text-2xl font-bold tabular-nums text-white">{value}</div>
+    <div className="card p-3 sm:p-4">
+      <div className="text-[11px] text-zinc-500 sm:text-xs">{label}</div>
+      <div className="text-xl font-bold tabular-nums text-white sm:text-2xl">{value}</div>
     </div>
   );
 }

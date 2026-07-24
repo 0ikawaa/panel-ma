@@ -195,42 +195,46 @@ export default function RentabilidadSku() {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="card flex flex-wrap items-end gap-3 p-4">
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field" />
-        </div>
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field" />
-        </div>
-        <div className="flex gap-1">
-          <button onClick={setMes} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">Mes</button>
-          <button onClick={set90} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">90 días</button>
-        </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="brand-gradient brand-glow rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
-        >
-          {loading ? "Cargando…" : "Actualizar"}
-        </button>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar SKU, producto o categoría…"
-            className="field !w-56 !py-2 text-sm"
-          />
-          <label className="flex items-center gap-1.5 text-sm text-zinc-400">
+      <div className="card space-y-3 p-3 sm:p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="grid grid-cols-2 gap-2 lg:flex lg:items-end">
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Desde</label>
+              <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
+              <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={setMes} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">Mes</button>
+            <button onClick={set90} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">90 días</button>
+            <button
+              onClick={fetchData}
+              disabled={loading}
+              className="brand-gradient brand-glow flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60 lg:flex-none"
+            >
+              {loading ? "Cargando…" : "Actualizar"}
+            </button>
+          </div>
+          <div className="flex flex-col gap-2 lg:ml-auto lg:flex-row lg:items-center">
             <input
-              type="checkbox"
-              checked={soloConCosto}
-              onChange={(e) => setSoloConCosto(e.target.checked)}
-              className="h-4 w-4 accent-teal-500"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Buscar SKU, producto o categoría…"
+              className="field !py-2 text-sm lg:!w-56"
             />
-            Solo con costo
-          </label>
+            <label className="flex items-center gap-1.5 text-sm text-zinc-400">
+              <input
+                type="checkbox"
+                checked={soloConCosto}
+                onChange={(e) => setSoloConCosto(e.target.checked)}
+                className="h-4 w-4 accent-teal-500"
+              />
+              Solo con costo
+            </label>
+          </div>
         </div>
       </div>
 
@@ -277,16 +281,18 @@ export default function RentabilidadSku() {
           </p>
           <div className="space-y-1.5">
             {focos.map((r) => (
-              <div key={r.sku} className="flex items-center gap-3 text-sm">
-                <span className="w-24 shrink-0 truncate font-mono text-xs text-zinc-400">{r.sku}</span>
-                <span className="min-w-0 flex-1 truncate text-zinc-300">{r.titulo ?? "—"}</span>
-                <span className="shrink-0 tabular-nums text-zinc-400">{fmtPeso(r.ingreso)}</span>
-                <span
-                  className={`w-16 shrink-0 rounded-md px-1.5 py-0.5 text-right text-xs font-bold tabular-nums ${
-                    (r.pct ?? 0) < 0 ? "bg-red-500/15 text-red-300" : "bg-amber-500/15 text-amber-300"
-                  }`}
-                >
-                  {((r.pct ?? 0) * 100).toFixed(1)}%
+              <div key={r.sku} className="text-sm sm:flex sm:items-center sm:gap-3">
+                <span className="block truncate font-mono text-xs text-zinc-400 sm:w-24 sm:shrink-0">{r.sku}</span>
+                <span className="mt-0.5 block truncate text-zinc-300 sm:mt-0 sm:min-w-0 sm:flex-1">{r.titulo ?? "—"}</span>
+                <span className="mt-0.5 flex items-center gap-2 sm:mt-0 sm:contents">
+                  <span className="shrink-0 tabular-nums text-zinc-400">{fmtPeso(r.ingreso)}</span>
+                  <span
+                    className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold tabular-nums sm:w-16 sm:text-right ${
+                      (r.pct ?? 0) < 0 ? "bg-red-500/15 text-red-300" : "bg-amber-500/15 text-amber-300"
+                    }`}
+                  >
+                    {((r.pct ?? 0) * 100).toFixed(1)}%
+                  </span>
                 </span>
               </div>
             ))}
@@ -317,7 +323,51 @@ export default function RentabilidadSku() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Lista en celular */}
+        <div className="divide-y divide-white/5 lg:hidden">
+          {filtradas.slice(0, limite).map((r) => (
+            <div key={r.sku} className="p-3">
+              <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.titulo ?? "—"}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-400">{r.sku}</span>
+                <span className="text-zinc-500">{fmtInt(r.unidades)} u.</span>
+                {r.stock != null && <span className="text-zinc-500">stock {fmtInt(r.stock)}</span>}
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-500">Facturado</div>
+                  <div className="text-sm font-semibold tabular-nums text-zinc-100">{fmtPeso(r.ingreso)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-500">Costo</div>
+                  <div className="text-sm font-semibold tabular-nums text-zinc-400">
+                    {r.costo != null ? fmtPeso(r.costo) : <span className="text-zinc-600">sin costo</span>}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-500">Margen</div>
+                  <div
+                    className={`text-sm font-bold tabular-nums ${
+                      r.margen == null ? "text-zinc-600" : r.margen < 0 ? "text-red-400" : "text-emerald-400"
+                    }`}
+                  >
+                    {r.margen != null ? fmtPeso(r.margen) : "—"}
+                    {r.pct != null && (
+                      <span className={`ml-1 text-[11px] font-semibold ${r.pct < 0 ? "text-red-400" : r.pct < 0.15 ? "text-amber-300" : "text-emerald-300"}`}>
+                        {(r.pct * 100).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filtradas.length === 0 && !loading && (
+            <div className="px-3 py-10 text-center text-sm text-zinc-500">Sin ventas en este rango.</div>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto lg:block">
           <table className="w-full text-left text-sm">
             <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
               <tr>
@@ -504,9 +554,9 @@ function Kpi({
 }) {
   const color = tone === "red" ? "text-red-400" : tone === "green" ? "text-emerald-400" : "text-white";
   return (
-    <div className="card p-4">
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className={`${big ? "text-2xl" : "text-lg"} font-bold tabular-nums ${color}`}>{value}</div>
+    <div className="card p-3 sm:p-4">
+      <div className="text-[11px] text-zinc-500 sm:text-xs">{label}</div>
+      <div className={`${big ? "text-xl sm:text-2xl" : "text-base sm:text-lg"} font-bold tabular-nums ${color}`}>{value}</div>
       {hint && <div className="mt-0.5 text-[11px] text-zinc-600">{hint}</div>}
     </div>
   );

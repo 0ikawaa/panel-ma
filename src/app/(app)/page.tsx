@@ -73,18 +73,18 @@ export default async function DashboardPage() {
         {cards.map((c) => (
           <div
             key={c.label}
-            className="animate-in card card-hover p-5"
+            className="animate-in card card-hover p-4 sm:p-5"
           >
             <div
-              className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl text-white shadow-lg"
+              className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl text-white shadow-lg sm:mb-4 sm:h-11 sm:w-11"
               style={{ backgroundImage: c.gradient }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 sm:h-6 sm:w-6">
                 {c.icon}
               </svg>
             </div>
-            <p className="text-2xl font-bold text-white">{c.value}</p>
-            <p className="mt-0.5 text-sm text-zinc-400">{c.label}</p>
+            <p className="text-xl font-bold tabular-nums text-white sm:text-2xl">{c.value}</p>
+            <p className="mt-0.5 text-xs text-zinc-400 sm:text-sm">{c.label}</p>
           </div>
         ))}
       </div>

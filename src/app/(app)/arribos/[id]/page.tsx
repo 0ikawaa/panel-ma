@@ -232,17 +232,15 @@ export default async function ContainerDetailPage({
             className={
               s.accent
                 ? "brand-gradient brand-glow rounded-2xl p-4 text-white"
-                : "card p-4"
+                : "card p-3 sm:p-4"
             }
           >
             <p
-              className={`text-xs font-medium uppercase tracking-wide ${s.accent ? "text-white/80" : "text-zinc-500"}`}
+              className={`text-[11px] font-medium uppercase tracking-wide sm:text-xs ${s.accent ? "text-white/80" : "text-zinc-500"}`}
             >
               {s.label}
             </p>
-            <p
-              className={`mt-1 text-2xl font-bold ${s.accent ? "text-white" : "text-white"}`}
-            >
+            <p className="mt-1 text-xl font-bold tabular-nums text-white sm:text-2xl">
               {s.value}
             </p>
           </div>
