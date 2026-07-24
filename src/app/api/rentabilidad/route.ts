@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { msQuery } from "@/lib/mundoshop";
+import { msQuery, mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
+
+// Código base de un SKU con variante: "20105-NEG" → "20105".
+function baseCode(sku: string): string {
+  return sku.split(/[-\s/]/)[0].trim();
+}
 
 export const dynamic = "force-dynamic";
 
@@ -112,14 +117,22 @@ export async function GET(req: Request) {
   let prodRows: Record<string, unknown>[];
   let apiOv: Record<string, unknown>[];
   let neonOv: { sku: string; cost: number }[];
+  let photos: Awaited<ReturnType<typeof mlPhotoMap>>;
+  let excelPhotos: { codigo: string | null; photo: string | null }[];
   try {
-    [mlRows, saleRows, posRows, prodRows, apiOv, neonOv] = await Promise.all([
+    [mlRows, saleRows, posRows, prodRows, apiOv, neonOv, photos, excelPhotos] = await Promise.all([
       msQuery(sqlMl),
       msQuery(sqlSale),
       msQuery(sqlPos),
       msQuery(sqlProductos),
       msQuery(sqlOverrides),
       prisma.costOverride.findMany({ select: { sku: true, cost: true } }),
+      mlPhotoMap(),
+      prisma.product.findMany({
+        where: { codigo: { not: null }, photo: { not: null } },
+        select: { codigo: true, photo: true },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
   } catch (e) {
     return NextResponse.json(
@@ -127,6 +140,17 @@ export async function GET(req: Request) {
       { status: 502 },
     );
   }
+
+  // Foto: ML primero; si no, la del Excel de Importaciones (por SKU exacto o código base).
+  const excelPhotoByCode = new Map<string, string>();
+  for (const p of excelPhotos) {
+    if (p.codigo && p.photo && !excelPhotoByCode.has(p.codigo)) excelPhotoByCode.set(p.codigo, p.photo);
+  }
+  const photoDe = (sku: string): string | null => {
+    const ml = resolveMlPhoto(photos, sku);
+    if (ml) return ml;
+    return excelPhotoByCode.get(sku) ?? excelPhotoByCode.get(baseCode(sku)) ?? null;
+  };
 
   // ---------- Costo unitario vigente por SKU ----------
   // Prioridad: override local (Neon) > override de la API > Odoo × IVA.
@@ -250,6 +274,7 @@ export async function GET(req: Request) {
       pct: margen != null && a.ingreso > 0 ? margen / a.ingreso : null,
       stock: cat?.stock ?? null,
       porCanal: a.porCanal,
+      photo: photoDe(a.sku),
     };
   });
 
@@ -266,6 +291,7 @@ export async function GET(req: Request) {
         stock: c.stock,
         costoUnitario: cu,
         inmovilizado: cu != null ? cu * c.stock : null,
+        photo: photoDe(sku),
       };
     })
     .sort((a, b) => (b.inmovilizado ?? 0) - (a.inmovilizado ?? 0));

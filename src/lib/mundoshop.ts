@@ -30,6 +30,55 @@ export async function msQuery(sql: string, timeoutMs = 30000): Promise<Row[]> {
   return json?.rows ?? [];
 }
 
+/** Fuerza https en las URLs de imágenes de ML (evita el bloqueo de contenido mixto en producción). */
+export function httpsUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  return u.replace(/^http:\/\//i, "https://");
+}
+
+const baseOf = (sku: string) => sku.split(/[-\s/]/)[0].trim();
+
+export type MlPhotoMaps = { bySku: Map<string, string>; byBase: Map<string, string> };
+
+/**
+ * Mapa SKU → foto principal de MercadoLibre (thumbnail). La foto vive por
+ * `item_id` en `ml_item_sales`; se la asocia al SKU con el puente item_id→item_sku
+ * de `ml_order_items`. Cubre las publicaciones que alguna vez vendieron (~580 SKUs).
+ * Si falla, devuelve mapas vacíos (las fotos son opcionales, no deben romper nada).
+ */
+export async function mlPhotoMap(timeoutMs = 20000): Promise<MlPhotoMaps> {
+  const sql = `
+    SELECT oi.item_sku AS sku, MAX(s.thumbnail) AS thumb
+    FROM ml_order_items oi
+    JOIN ml_item_sales s ON s.item_id = oi.item_id
+    WHERE oi.item_sku IS NOT NULL AND oi.item_sku <> ''
+      AND s.thumbnail IS NOT NULL AND s.thumbnail <> ''
+    GROUP BY oi.item_sku`;
+  const bySku = new Map<string, string>();
+  const byBase = new Map<string, string>();
+  let rows: Row[];
+  try {
+    rows = await msQuery(sql, timeoutMs);
+  } catch {
+    return { bySku, byBase };
+  }
+  for (const r of rows) {
+    const sku = String(r.sku);
+    const thumb = httpsUrl(String(r.thumb));
+    if (!thumb) continue;
+    bySku.set(sku, thumb);
+    const b = baseOf(sku);
+    if (!byBase.has(b)) byBase.set(b, thumb);
+  }
+  return { bySku, byBase };
+}
+
+/** Foto de ML para un SKU: match exacto y, si no, por código base. */
+export function resolveMlPhoto(maps: MlPhotoMaps, sku: string | null | undefined): string | null {
+  if (!sku) return null;
+  return maps.bySku.get(sku) ?? maps.byBase.get(baseOf(sku)) ?? null;
+}
+
 /** GET genérico a un endpoint de MUNDO SHOP (ej. "ml-items?status=active"). */
 export async function msGet<T = unknown>(path: string, timeoutMs = 30000): Promise<T> {
   if (!KEY) throw new Error("Falta MUNDOSHOP_API_KEY en el .env");

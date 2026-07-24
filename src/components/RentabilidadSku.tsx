@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtInt, fmtPeso } from "@/lib/format";
+import ProductThumb from "./ProductThumb";
 
 type Row = {
   sku: string;
@@ -16,6 +17,7 @@ type Row = {
   pct: number | null;
   stock: number | null;
   porCanal: { ml: number; mayorista: number; otros: number; local: number };
+  photo: string | null;
 };
 
 type Muerto = {
@@ -25,6 +27,7 @@ type Muerto = {
   stock: number;
   costoUnitario: number | null;
   inmovilizado: number | null;
+  photo: string | null;
 };
 
 type ApiResp = {
@@ -327,11 +330,16 @@ export default function RentabilidadSku() {
         <div className="divide-y divide-white/5 lg:hidden">
           {filtradas.slice(0, limite).map((r) => (
             <div key={r.sku} className="p-3">
-              <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.titulo ?? "—"}</div>
-              <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-                <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-400">{r.sku}</span>
-                <span className="text-zinc-500">{fmtInt(r.unidades)} u.</span>
-                {r.stock != null && <span className="text-zinc-500">stock {fmtInt(r.stock)}</span>}
+              <div className="flex items-start gap-3">
+                <ProductThumb src={r.photo} alt={r.sku} size={48} />
+                <div className="min-w-0 flex-1">
+                  <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.titulo ?? "—"}</div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                    <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-400">{r.sku}</span>
+                    <span className="text-zinc-500">{fmtInt(r.unidades)} u.</span>
+                    {r.stock != null && <span className="text-zinc-500">stock {fmtInt(r.stock)}</span>}
+                  </div>
+                </div>
               </div>
               <div className="mt-2.5 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
                 <div>
@@ -371,6 +379,7 @@ export default function RentabilidadSku() {
           <table className="w-full text-left text-sm">
             <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
               <tr>
+                <th className="px-3 py-2" />
                 <th className="px-3 py-2 font-semibold">SKU</th>
                 <th className="px-3 py-2 font-semibold">Producto</th>
                 <th className="px-3 py-2 text-right font-semibold">Unid.</th>
@@ -385,6 +394,7 @@ export default function RentabilidadSku() {
             <tbody className="divide-y divide-white/5">
               {filtradas.slice(0, limite).map((r) => (
                 <tr key={r.sku} className="transition hover:bg-white/[0.03]">
+                  <td className="px-3 py-2"><ProductThumb src={r.photo} alt={r.sku} size={36} /></td>
                   <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-zinc-400">{r.sku}</td>
                   <td className="max-w-xs truncate px-3 py-2 text-zinc-200" title={r.titulo ?? ""}>
                     {r.titulo ?? "—"}
@@ -428,7 +438,7 @@ export default function RentabilidadSku() {
               ))}
               {filtradas.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-10 text-center text-sm text-zinc-500">
+                  <td colSpan={10} className="px-3 py-10 text-center text-sm text-zinc-500">
                     Sin ventas en este rango.
                   </td>
                 </tr>
@@ -482,6 +492,7 @@ export default function RentabilidadSku() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-500">
                   <tr>
+                    <th className="px-3 py-2" />
                     <th className="px-3 py-2 font-semibold">SKU</th>
                     <th className="px-3 py-2 font-semibold">Producto</th>
                     <th className="px-3 py-2 text-right font-semibold">Stock</th>
@@ -491,6 +502,7 @@ export default function RentabilidadSku() {
                 <tbody className="divide-y divide-white/5">
                   {(data?.stockMuerto ?? []).slice(0, 100).map((m) => (
                     <tr key={m.sku} className="transition hover:bg-white/[0.03]">
+                      <td className="px-3 py-2"><ProductThumb src={m.photo} alt={m.sku} size={36} /></td>
                       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-zinc-400">{m.sku}</td>
                       <td className="max-w-xs truncate px-3 py-2 text-zinc-200" title={m.titulo ?? ""}>
                         {m.titulo ?? "—"}

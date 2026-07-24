@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtInt } from "@/lib/format";
+import ProductThumb from "./ProductThumb";
 
 type ApiRow = {
   sku: string;
@@ -11,6 +12,7 @@ type ApiRow = {
   stock: number | null;
   enCamino: number;
   costoOrigen: number | null;
+  photo: string | null;
 };
 type ApiResp = { desde: string; hasta: string; rows: ApiRow[]; count: number; syncedAt: string };
 
@@ -310,12 +312,17 @@ export default function ReposicionLive() {
 
         {filtered.map((r) => (
           <div key={r.sku} className="card p-3">
-            <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">
-              {r.titulo ?? <span className="text-zinc-600">—</span>}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
-              <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300">{r.sku}</span>
-              <span className="text-zinc-500">{fmtInt(r.vendidas)} vendidas · {fmtDec(r.promMes, 1)}/mes</span>
+            <div className="flex items-start gap-3">
+              <ProductThumb src={r.photo} alt={r.sku} size={48} />
+              <div className="min-w-0 flex-1">
+                <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">
+                  {r.titulo ?? <span className="text-zinc-600">—</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                  <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300">{r.sku}</span>
+                  <span className="text-zinc-500">{fmtInt(r.vendidas)} vendidas · {fmtDec(r.promMes, 1)}/mes</span>
+                </div>
+              </div>
             </div>
             <div className="mt-2.5 grid grid-cols-4 gap-2 border-t border-white/5 pt-2.5">
               <div>
@@ -360,6 +367,7 @@ export default function ReposicionLive() {
         <table className="w-full border-collapse text-sm">
           <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-400">
             <tr>
+              <th className="px-3 py-3" />
               <Th onClick={() => toggleSort("sku")}>Código{arrow("sku")}</Th>
               <Th className="text-left" onClick={() => toggleSort("titulo")}>Título{arrow("titulo")}</Th>
               <Th right onClick={() => toggleSort("vendidas")}>Vendidas{arrow("vendidas")}</Th>
@@ -373,6 +381,7 @@ export default function ReposicionLive() {
           <tbody className="divide-y divide-white/5">
             {filtered.map((r) => (
               <tr key={r.sku} className="transition hover:bg-white/[0.03]">
+                <td className="px-3 py-2"><ProductThumb src={r.photo} alt={r.sku} size={40} /></td>
                 <td className="whitespace-nowrap px-3 py-2.5 font-mono font-medium text-zinc-100">{r.sku}</td>
                 <td className="max-w-[280px] truncate px-3 py-2.5 text-zinc-300" title={r.titulo ?? ""}>
                   {r.titulo ?? <span className="text-zinc-600">—</span>}
@@ -394,12 +403,12 @@ export default function ReposicionLive() {
               </tr>
             ))}
             {filtered.length === 0 && !loading && (
-              <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-zinc-500">No hay resultados en este rango.</td></tr>
+              <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-zinc-500">No hay resultados en este rango.</td></tr>
             )}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-white/10 bg-white/[0.03] font-semibold text-white">
-              <td className="px-3 py-3" colSpan={6}>{fmtInt(totals.skus)} SKUs a reponer</td>
+              <td className="px-3 py-3" colSpan={7}>{fmtInt(totals.skus)} SKUs a reponer</td>
               <td className="px-3 py-3 text-right tabular-nums text-teal-300">{fmtInt(totals.unidades)}</td>
               <td className="px-3 py-3 text-right tabular-nums">{fmtUsd(totals.valor)}</td>
             </tr>

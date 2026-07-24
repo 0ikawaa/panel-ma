@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { msQuery } from "@/lib/mundoshop";
+import { msQuery, mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ type OrderItem = {
   unitPrice: number;
   baseCost: number | null; // costo unitario final: override de la API, o Odoo×IVA
   overrideCost: number | null; // override manual local (nuestra base Neon)
+  photo: string | null; // foto ML (o del Excel de Importaciones como fallback)
 };
 
 type Order = {
@@ -76,11 +77,19 @@ export async function GET(req: Request) {
 
   let rows: Record<string, unknown>[];
   let overrides: { sku: string; cost: number }[];
+  let photos: Awaited<ReturnType<typeof mlPhotoMap>>;
+  let excelPhotos: { codigo: string | null; photo: string | null }[];
   try {
     // La API externa y la base local en paralelo.
-    [rows, overrides] = await Promise.all([
+    [rows, overrides, photos, excelPhotos] = await Promise.all([
       msQuery(sql),
       prisma.costOverride.findMany({ select: { sku: true, cost: true } }),
+      mlPhotoMap(),
+      prisma.product.findMany({
+        where: { codigo: { not: null }, photo: { not: null } },
+        select: { codigo: true, photo: true },
+        orderBy: { createdAt: "desc" },
+      }),
     ]);
   } catch (e) {
     return NextResponse.json(
@@ -90,6 +99,17 @@ export async function GET(req: Request) {
   }
 
   const ovMap = new Map(overrides.map((o) => [o.sku, o.cost]));
+  // Foto del Excel de Importaciones por código (la más reciente).
+  const excelPhotoByCode = new Map<string, string>();
+  for (const p of excelPhotos) {
+    if (p.codigo && p.photo && !excelPhotoByCode.has(p.codigo)) excelPhotoByCode.set(p.codigo, p.photo);
+  }
+  const photoDe = (sku: string): string | null => {
+    const ml = resolveMlPhoto(photos, sku);
+    if (ml) return ml;
+    const base = sku.split(/[-\s/]/)[0].trim();
+    return excelPhotoByCode.get(sku) ?? excelPhotoByCode.get(base) ?? null;
+  };
 
   const byOrder = new Map<string, Order>();
   for (const r of rows) {
@@ -134,6 +154,7 @@ export async function GET(req: Request) {
       unitPrice: num(r.unit_price) ?? 0,
       baseCost,
       overrideCost: ovMap.has(sku) ? (ovMap.get(sku) as number) : null,
+      photo: photoDe(sku),
     });
   }
 

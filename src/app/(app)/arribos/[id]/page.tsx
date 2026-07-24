@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
 import DeleteContainerButton from "@/components/DeleteContainerButton";
@@ -40,10 +41,13 @@ export default async function ContainerDetailPage({
   const cbmTotal = products.reduce((a, p) => a + (p.cbmTotal ?? 0), 0);
   const unidades = products.reduce((a, p) => a + (p.unidades ?? 0), 0);
 
+  // Foto de MercadoLibre por código; si no hay, se usa la del Excel (p.photo).
+  const mlPhotos = await mlPhotoMap().catch(() => ({ bySku: new Map<string, string>(), byBase: new Map<string, string>() }));
+
   const rows = products.map((p) => ({
     id: p.id,
     rowIndex: p.rowIndex,
-    photo: p.photo,
+    photo: resolveMlPhoto(mlPhotos, p.codigo) ?? p.photo,
     codigo: p.codigo,
     precioChina: p.precioChina,
     cbmUnitario: p.cbmUnitario,

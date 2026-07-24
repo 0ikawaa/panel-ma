@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtPeso, fmtPesoSigned } from "@/lib/format";
+import ProductThumb from "./ProductThumb";
 
 // ---------- Tipos (coinciden con /api/ventas-ml) ----------
 type ApiItem = {
@@ -12,6 +13,7 @@ type ApiItem = {
   unitPrice: number;
   baseCost: number | null; // costo final: override de la API (tal cual) u Odoo×IVA
   overrideCost: number | null; // override manual local
+  photo: string | null; // foto ML (o del Excel de Importaciones como fallback)
 };
 type ApiOrder = {
   orderId: string;
@@ -253,16 +255,17 @@ export default function OrdenesRealTime() {
   const porPublicacion = useMemo(() => {
     const map = new Map<
       string,
-      { sku: string; title: string; unidades: number; venta: number; costo: number; hasCost: boolean }
+      { sku: string; title: string; photo: string | null; unidades: number; venta: number; costo: number; hasCost: boolean }
     >();
     for (const o of sorted) {
       for (const it of o.items) {
         const key = it.sku || it.itemId;
         let r = map.get(key);
         if (!r) {
-          r = { sku: it.sku, title: it.title, unidades: 0, venta: 0, costo: 0, hasCost: true };
+          r = { sku: it.sku, title: it.title, photo: it.photo, unidades: 0, venta: 0, costo: 0, hasCost: true };
           map.set(key, r);
         }
+        if (!r.photo && it.photo) r.photo = it.photo;
         r.unidades += it.qty;
         r.venta += it.unitPrice * it.qty;
         const c = effCost(it);
@@ -492,6 +495,7 @@ export default function OrdenesRealTime() {
               <div key={o.orderId} className={`card p-3 transition active:bg-white/[0.04] ${dim ? "opacity-60" : ""}`}>
                 <div onClick={() => setDetail(o)} className="cursor-pointer">
                   <div className="flex items-start justify-between gap-2">
+                    <ProductThumb src={it?.photo} alt={it?.sku} size={44} />
                     <div className="min-w-0 flex-1">
                       <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">
                         {isPack && <span className="mr-1 rounded bg-indigo-500/15 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-indigo-200">PACK x{siblings.length}</span>}
@@ -637,6 +641,7 @@ export default function OrdenesRealTime() {
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}><path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                             </button>
                           ) : <span className="w-4" />}
+                          <ProductThumb src={it?.photo} alt={it?.sku} size={36} />
                           <div className="min-w-0">
                             <div className="truncate text-zinc-100" title={it?.title}>
                               {isPack && <span className="mr-1 rounded bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-200">PACK x{siblings.length}</span>}
@@ -710,12 +715,17 @@ export default function OrdenesRealTime() {
             const pct = r.venta ? margen / r.venta : 0;
             return (
               <div key={r.sku || r.title} className="card p-3">
-                <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.title}</div>
-                <div className="mt-1 flex items-center gap-2 text-[11px]">
-                  <button onClick={() => openEdit(r.sku, r.title, null)} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300 active:bg-white/10">
-                    {r.sku || "—"}
-                  </button>
-                  <span className="text-zinc-500">{r.unidades} u.</span>
+                <div className="flex items-start gap-3">
+                  <ProductThumb src={r.photo} alt={r.sku} size={44} />
+                  <div className="min-w-0 flex-1">
+                    <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.title}</div>
+                    <div className="mt-1 flex items-center gap-2 text-[11px]">
+                      <button onClick={() => openEdit(r.sku, r.title, null)} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300 active:bg-white/10">
+                        {r.sku || "—"}
+                      </button>
+                      <span className="text-zinc-500">{r.unidades} u.</span>
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
                   <div>
@@ -747,6 +757,7 @@ export default function OrdenesRealTime() {
           <table className="w-full border-collapse text-sm">
             <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-400">
               <tr>
+                <Th className="text-left"> </Th>
                 <Th className="text-left">SKU</Th>
                 <Th className="text-left">Producto</Th>
                 <Th right>Unidades</Th>
@@ -758,13 +769,14 @@ export default function OrdenesRealTime() {
             </thead>
             <tbody className="divide-y divide-white/5">
               {porPublicacion.length === 0 && (
-                <tr><td colSpan={7} className="px-4 py-12 text-center text-zinc-500">Sin datos.</td></tr>
+                <tr><td colSpan={8} className="px-4 py-12 text-center text-zinc-500">Sin datos.</td></tr>
               )}
               {porPublicacion.map((r) => {
                 const margen = r.venta - r.costo;
                 const pct = r.venta ? margen / r.venta : 0;
                 return (
                   <tr key={r.sku || r.title} className="transition hover:bg-white/[0.03]">
+                    <td className="px-2.5 py-2"><ProductThumb src={r.photo} alt={r.sku} size={36} /></td>
                     <td className="px-2.5 py-2.5 font-mono text-xs text-zinc-300">
                       <button onClick={() => openEdit(r.sku, r.title, null)} className="hover:text-white" title="Editar costo del SKU">{r.sku || "—"}</button>
                     </td>
@@ -813,10 +825,13 @@ export default function OrdenesRealTime() {
                 {/* PRODUCTO */}
                 <Section label="Producto">
                   {detail.items.map((it, i) => (
-                    <div key={it.itemId || i} className="mb-1.5">
-                      <div className="font-semibold leading-snug text-zinc-100">{it.title || "—"}</div>
-                      <div className="mt-0.5 text-xs text-zinc-500">
-                        {it.sku || "sin SKU"}{it.qty > 1 ? ` · ${it.qty} u.` : ""}
+                    <div key={it.itemId || i} className="mb-1.5 flex items-start gap-3">
+                      <ProductThumb src={it.photo} alt={it.sku} size={52} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold leading-snug text-zinc-100">{it.title || "—"}</div>
+                        <div className="mt-0.5 text-xs text-zinc-500">
+                          {it.sku || "sin SKU"}{it.qty > 1 ? ` · ${it.qty} u.` : ""}
+                        </div>
                       </div>
                     </div>
                   ))}
