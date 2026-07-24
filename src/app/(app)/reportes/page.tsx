@@ -18,6 +18,13 @@ const REPORTES = [
     tag: "En vivo",
     activo: true,
   },
+  {
+    href: "/reportes/cancelaciones",
+    titulo: "Cancelaciones de MercadoLibre",
+    desc: "Órdenes canceladas por semana o mes, con la tasa de cancelación, el motivo (no pagada / fraude) y la comparación contra el período anterior. Después le sumamos los reclamos cuando se habiliten.",
+    tag: "En vivo",
+    activo: true,
+  },
 ];
 
 export default function ReportesPage() {
