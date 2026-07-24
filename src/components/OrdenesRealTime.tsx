@@ -368,50 +368,59 @@ export default function OrdenesRealTime() {
   return (
     <div className="space-y-4">
       {/* ---------- Toolbar ---------- */}
-      <div className="card flex flex-wrap items-end gap-3 p-4">
-        <label className="relative min-w-[220px] flex-1">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500">
-            <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
-          </svg>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="SKU, producto, orden…" className="field !pl-11" />
-        </label>
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Desde</label>
-          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field" />
+      <div className="card space-y-3 p-3 sm:p-4">
+        {/* Buscador + rango */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <label className="relative block min-w-0 flex-1">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500">
+              <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="SKU, producto, orden…" className="field !pl-11" />
+          </label>
+          <div className="grid grid-cols-2 gap-2 lg:flex lg:items-end">
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Desde</label>
+              <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+            <div className="min-w-0">
+              <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
+              <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field !px-2.5 text-sm lg:!px-3.5" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={setHoy} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">Hoy</button>
+            <button onClick={setMes} className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 lg:flex-none">Mes</button>
+            <button onClick={fetchData} disabled={loading} className="brand-gradient brand-glow flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60 lg:flex-none">
+              {loading ? "Buscando…" : "Buscar"}
+            </button>
+            <button onClick={fetchData} disabled={loading} className="shrink-0 rounded-xl border border-white/10 bg-white/5 p-2.5 text-zinc-200 transition hover:bg-white/10" aria-label="Refrescar" title="Refrescar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={`h-5 w-5 ${loading ? "animate-spin" : ""}`}>
+                <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <button onClick={exportCsv} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">CSV</button>
+          </div>
         </div>
-        <div>
-          <label className="mb-1 block text-[11px] font-medium text-zinc-500">Hasta</label>
-          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="field" />
-        </div>
-        <div className="flex gap-1">
-          <button onClick={setHoy} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">Hoy</button>
-          <button onClick={setMes} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">Mes</button>
-        </div>
-        <button onClick={fetchData} disabled={loading} className="brand-gradient brand-glow rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60">
-          {loading ? "Buscando…" : "Buscar"}
-        </button>
-        <button onClick={fetchData} disabled={loading} className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-zinc-200 transition hover:bg-white/10" aria-label="Refrescar" title="Refrescar">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className={`h-5 w-5 ${loading ? "animate-spin" : ""}`}>
-            <path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <button onClick={exportCsv} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10">CSV</button>
 
-        <div className="flex flex-wrap items-center gap-3 text-sm">
+        {/* Filtros: en celular se deslizan en horizontal en vez de apilarse. */}
+        <div className="-mx-3 flex items-center gap-2 overflow-x-auto px-3 pb-1 sm:-mx-4 sm:px-4 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
           <Toggle label="Incluir sin costo" on={incluirSinCosto} onClick={() => setIncluirSinCosto((v) => !v)} />
           <Toggle label="Solo sin costo" on={soloSinCosto} onClick={() => setSoloSinCosto((v) => !v)} />
           <Toggle label="Sospechosas" on={sospechosas} onClick={() => setSospechosas((v) => !v)} accent="amber" />
           <Toggle label="Auto 60s" on={auto} onClick={() => setAuto((v) => !v)} accent="teal" />
-          <label className="flex items-center gap-1.5 text-zinc-400">
+          <label className="flex shrink-0 items-center gap-1.5 text-xs text-zinc-400">
             Publi %
             <input type="number" min={0} step={0.5} value={publiPct}
               onChange={(e) => setPubliPct(Number(e.target.value) || 0)}
-              className="field !w-16 !py-1.5 text-center" />
+              className="field !w-16 !py-1.5 text-center text-sm" />
           </label>
+          <span className="ml-auto hidden shrink-0 pl-2 text-sm text-zinc-500 lg:inline">
+            {conCosto} con costo{sorted.length - conCosto > 0 ? ` (${sorted.length - conCosto} sin costo)` : ""}
+          </span>
         </div>
-        <span className="ml-auto text-sm text-zinc-500">
-          {conCosto} con costo{sorted.length - conCosto > 0 ? ` (${sorted.length - conCosto} sin costo)` : ""}
-        </span>
+        <p className="text-xs text-zinc-500 lg:hidden">
+          {conCosto} con costo{sorted.length - conCosto > 0 ? ` · ${sorted.length - conCosto} sin costo` : ""}
+        </p>
       </div>
 
       {error && (
@@ -426,7 +435,7 @@ export default function OrdenesRealTime() {
       )}
 
       {/* ---------- Totales ---------- */}
-      <div className="card flex flex-wrap gap-x-8 gap-y-3 p-4">
+      <div className="card grid grid-cols-2 gap-x-4 gap-y-3 p-3 sm:grid-cols-3 sm:p-4 lg:flex lg:flex-wrap lg:gap-x-8">
         <Tile label="Venta" value={fmtPeso(totals.venta)} />
         <Tile label="Costo" value={fmtPeso(totals.costo)} />
         <Tile label="Comisión" value={fmtPeso(totals.comision)} tone="red" />
@@ -441,9 +450,138 @@ export default function OrdenesRealTime() {
         <TabBtn active={tab === "publicacion"} onClick={() => setTab("publicacion")}>Por publicación</TabBtn>
       </div>
 
-      {/* ---------- Tabla por orden ---------- */}
+      {/* Orden de la lista: en celular no hay encabezados de tabla clickeables. */}
       {tab === "orden" && (
-        <div className="card overflow-x-auto">
+        <div className="flex items-center gap-2 lg:hidden">
+          <span className="text-xs text-zinc-500">Ordenar por</span>
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="field !w-auto !py-1.5 text-sm"
+          >
+            <option value="fecha">Fecha</option>
+            <option value="venta">Venta</option>
+            <option value="costo">Costo</option>
+            <option value="margen">Margen $</option>
+            <option value="pct">Margen %</option>
+          </select>
+          <button
+            onClick={() => setSortDir((d) => (d === 1 ? -1 : 1))}
+            className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-white/10"
+            aria-label="Invertir orden"
+          >
+            {sortDir === 1 ? "▲ Asc" : "▼ Desc"}
+          </button>
+        </div>
+      )}
+
+      {/* ---------- Lista por orden (celular) ---------- */}
+      {tab === "orden" && (
+        <div className="space-y-2.5 lg:hidden">
+          {sorted.length === 0 && !loading && (
+            <div className="card px-4 py-10 text-center text-sm text-zinc-500">No hay órdenes en este rango.</div>
+          )}
+          {sorted.map((o) => {
+            const m = metrics(o);
+            const it = o.items[0];
+            const siblings = o.packId ? packMap.get(o.packId) ?? [] : [];
+            const isPack = siblings.length > 1;
+            const isOpen = expanded.has(o.orderId);
+            const dim = !m.hasCost && !incluirSinCosto;
+            return (
+              <div key={o.orderId} className={`card p-3 transition active:bg-white/[0.04] ${dim ? "opacity-60" : ""}`}>
+                <div onClick={() => setDetail(o)} className="cursor-pointer">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">
+                        {isPack && <span className="mr-1 rounded bg-indigo-500/15 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-indigo-200">PACK x{siblings.length}</span>}
+                        {it?.title || "—"}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
+                        <span className="text-zinc-500">{it?.sku || "sin SKU"}</span>
+                        <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">…{o.orderId.slice(-4)}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-xs font-medium text-zinc-300">{fmtDiaCorto(o.date)}</div>
+                      <div className="text-[11px] text-zinc-500">{fmtHora(o.date)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-zinc-500">Venta</div>
+                      <div className="text-sm font-semibold tabular-nums text-zinc-100">{fmtPeso(m.venta)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wide text-zinc-500">Costo</div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (it) openEdit(it.sku, it.title, effCost(it)); }}
+                        className={`-ml-1 inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-sm font-semibold tabular-nums transition active:bg-white/10 ${m.hasCost ? "text-zinc-100" : "text-amber-300"}`}
+                      >
+                        {m.hasCost ? fmtPeso(m.costo) : "sin costo"}
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3 opacity-60"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      </button>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] uppercase tracking-wide text-zinc-500">Margen</div>
+                      <div className={`text-sm font-bold tabular-nums ${m.margen < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {fmtPeso(m.margen)}
+                        <span className={`ml-1 text-[11px] font-semibold ${m.pct < 0 ? "text-red-400" : "text-amber-300"}`}>{(m.pct * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <TipoBadges o={o} />
+                    <div className="flex items-center gap-3 text-[11px] tabular-nums text-zinc-500">
+                      <span className="text-red-400">Com. -{fmtPeso(m.comision)}</span>
+                      <span className={m.envio < 0 ? "text-red-400" : "text-emerald-400"}>Env. {fmtPesoSigned(m.envio)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {isPack && (
+                  <button
+                    onClick={() => toggleRow(o.orderId)}
+                    className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] py-1.5 text-[11px] font-semibold text-zinc-400 transition active:bg-white/10"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`}><path d="m9 18 6-6-6-6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    {isOpen ? "Ocultar" : "Ver"} las {siblings.length} órdenes del pack
+                  </button>
+                )}
+                {isPack && isOpen && (
+                  <div className="animate-in mt-2 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-2.5">
+                    {siblings.map((s) => {
+                      const sit = s.items[0];
+                      const c = sit ? effCost(sit) : null;
+                      return (
+                        <div key={s.orderId} className="text-xs">
+                          <div className="line-clamp-1 text-zinc-200">{sit?.title || "—"}</div>
+                          <div className="mt-0.5 flex items-center justify-between gap-2">
+                            <span className="font-mono text-[11px] text-zinc-500">{sit?.sku || "—"}</span>
+                            <div className="flex items-center gap-3 tabular-nums">
+                              <span className="text-zinc-200">{fmtPeso(s.venta)}</span>
+                              <button onClick={() => sit && openEdit(sit.sku, sit.title, c)} className={`inline-flex items-center gap-1 rounded px-1 py-0.5 active:bg-white/10 ${c == null ? "text-amber-300" : "text-zinc-200"}`}>
+                                {c == null ? "sin costo" : fmtPeso(c * (sit?.qty ?? 1))}
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3 opacity-60"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ---------- Tabla por orden (desktop) ---------- */}
+      {tab === "orden" && (
+        <div className="card hidden overflow-x-auto lg:block">
           <table className="w-full table-fixed border-collapse text-sm">
             <colgroup>
               <col style={{ width: "60px" }} />
@@ -561,9 +699,51 @@ export default function OrdenesRealTime() {
         </div>
       )}
 
-      {/* ---------- Tabla por publicación ---------- */}
+      {/* ---------- Lista por publicación (celular) ---------- */}
       {tab === "publicacion" && (
-        <div className="card overflow-x-auto">
+        <div className="space-y-2.5 lg:hidden">
+          {porPublicacion.length === 0 && (
+            <div className="card px-4 py-10 text-center text-sm text-zinc-500">Sin datos.</div>
+          )}
+          {porPublicacion.map((r) => {
+            const margen = r.venta - r.costo;
+            const pct = r.venta ? margen / r.venta : 0;
+            return (
+              <div key={r.sku || r.title} className="card p-3">
+                <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{r.title}</div>
+                <div className="mt-1 flex items-center gap-2 text-[11px]">
+                  <button onClick={() => openEdit(r.sku, r.title, null)} className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300 active:bg-white/10">
+                    {r.sku || "—"}
+                  </button>
+                  <span className="text-zinc-500">{r.unidades} u.</span>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/5 pt-2.5">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-500">Venta</div>
+                    <div className="text-sm font-semibold tabular-nums text-zinc-100">{fmtPeso(r.venta)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-500">Costo</div>
+                    <div className={`text-sm font-semibold tabular-nums ${r.hasCost ? "text-zinc-100" : "text-amber-300"}`}>{r.hasCost ? fmtPeso(r.costo) : "parcial"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] uppercase tracking-wide text-zinc-500">Margen bruto</div>
+                    <div className={`text-sm font-bold tabular-nums ${margen < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                      {fmtPeso(margen)}
+                      <span className={`ml-1 text-[11px] font-semibold ${pct < 0 ? "text-red-400" : "text-amber-300"}`}>{(pct * 100).toFixed(0)}%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <p className="px-1 text-xs text-zinc-500">Margen bruto = Venta − Costo (no incluye comisión, envío ni publicidad, que son por orden).</p>
+        </div>
+      )}
+
+      {/* ---------- Tabla por publicación (desktop) ---------- */}
+      {tab === "publicacion" && (
+        <div className="card hidden overflow-x-auto lg:block">
           <table className="w-full border-collapse text-sm">
             <thead className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wide text-zinc-400">
               <tr>
@@ -616,17 +796,20 @@ export default function OrdenesRealTime() {
         const pctOf = (v: number) => (m.venta ? Math.round((v / m.venta) * 100) : 0);
         const mlUrl = `https://www.mercadolibre.com.uy/ventas/${detail.orderId}/detalle`;
         return (
-          <div className="fixed inset-0 z-40 flex justify-end">
+          <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-stretch sm:justify-end">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDetail(null)} />
-            <div className="animate-in relative h-full w-full max-w-[420px] overflow-y-auto border-l border-white/10 bg-[#131319] shadow-2xl">
-              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#131319]/95 px-5 py-4 backdrop-blur">
-                <h2 className="text-lg font-bold text-white">Detalle</h2>
-                <button onClick={() => setDetail(null)} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
-                </button>
+            <div className="animate-in relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#131319] shadow-2xl sm:h-full sm:max-h-none sm:max-w-[420px] sm:rounded-none sm:border-l sm:border-t-0">
+              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#131319]/95 backdrop-blur">
+                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
+                <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4">
+                  <h2 className="text-lg font-bold text-white">Detalle</h2>
+                  <button onClick={() => setDetail(null)} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-6 px-5 py-5">
+              <div className="space-y-6 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-5">
                 {/* PRODUCTO */}
                 <Section label="Producto">
                   {detail.items.map((it, i) => (
@@ -793,9 +976,9 @@ function Th({ children, right, onClick, className }: { children: React.ReactNode
 function Tile({ label, value, tone, big }: { label: string; value: string; tone?: "red" | "green"; big?: boolean }) {
   const color = tone === "red" ? "text-red-400" : tone === "green" ? "text-emerald-400" : "text-white";
   return (
-    <div>
-      <div className="text-xs text-zinc-500">{label}</div>
-      <div className={`${big ? "text-xl" : "text-lg"} font-bold tabular-nums ${color}`}>{value}</div>
+    <div className="min-w-0">
+      <div className="truncate text-[11px] text-zinc-500 sm:text-xs">{label}</div>
+      <div className={`${big ? "text-lg sm:text-xl" : "text-base sm:text-lg"} font-bold tabular-nums ${color}`}>{value}</div>
     </div>
   );
 }
@@ -806,7 +989,7 @@ function Toggle({ label, on, onClick, accent = "indigo" }: { label: string; on: 
     : accent === "teal" ? "border-teal-400/40 bg-teal-500/15 text-teal-200"
     : "border-indigo-400/40 bg-indigo-500/15 text-indigo-100";
   return (
-    <button onClick={onClick} className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${on ? onCls : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"}`}>
+    <button onClick={onClick} className={`shrink-0 whitespace-nowrap rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${on ? onCls : "border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10"}`}>
       {label}
     </button>
   );
