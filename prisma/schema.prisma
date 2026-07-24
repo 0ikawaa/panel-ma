@@ -143,6 +143,19 @@ model ProductOrigin {
   updatedAt DateTime @updatedAt
 }
 
+/// Ventas mensuales históricas por código (importadas del export del negocio:
+/// Zureo 2023-08→2025-08 + Odoo 2025-08→2026-05). Se usa para la comparación
+/// interanual del reporte "Sin rotación" en los meses que MUNDO SHOP todavía no
+/// cubre. `code` es el código tal cual venía (puede tener variante).
+model VentaHistorica {
+  code String // código del producto (puede incluir variante)
+  mes  String // "YYYY-MM"
+  qty  Int // unidades vendidas ese mes
+
+  @@id([code, mes])
+  @@index([mes])
+}
+
 /// Una corrida de un reporte (manual o automática). Guarda el snapshot de los
 /// SKUs marcados para poder mostrarlo en la sección y saber qué se envió.
 model ReportRun {

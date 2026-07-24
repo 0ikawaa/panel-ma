@@ -2,14 +2,17 @@ import { describe, it, expect } from "vitest";
 import {
   scoreRotacion,
   summarizeRotacion,
-  rotacionWindows,
+  rotacionMeses,
+  monthRange,
+  addMonth,
+  mesLabel,
   normalizeRotacionParams,
   motivoLabel,
   ROTACION_DEFAULTS,
   type RotacionInput,
 } from "./rotacion";
 
-const P = { ...ROTACION_DEFAULTS, ventanaDias: 30, minUnidadesRef: 5, caidaMin: 0.5 };
+const P = { ...ROTACION_DEFAULTS, minUnidadesRef: 5, caidaMin: 0.5 };
 
 function input(over: Partial<RotacionInput>): RotacionInput {
   return {
@@ -97,16 +100,35 @@ describe("summarizeRotacion", () => {
   });
 });
 
-describe("rotacionWindows", () => {
-  it("arma las tres ventanas correctamente", () => {
+describe("rotacionMeses", () => {
+  it("toma el último mes cerrado, el anterior y el mismo del año pasado", () => {
     const now = new Date("2026-07-24T15:00:00Z");
-    const w = rotacionWindows(30, now);
-    expect(w.actualHasta).toBe("2026-07-24");
-    expect(w.actualDesde).toBe("2026-06-25");
-    expect(w.mesHasta).toBe("2026-06-24");
-    expect(w.mesDesde).toBe("2026-05-26");
-    expect(w.anioHasta).toBe("2025-07-24");
-    expect(w.anioDesde).toBe("2025-06-25");
+    const m = rotacionMeses(now);
+    expect(m.actual).toBe("2026-06"); // último mes completo
+    expect(m.mesPasado).toBe("2026-05");
+    expect(m.anioPasado).toBe("2025-06");
+  });
+
+  it("cruza bien el fin de año", () => {
+    const m = rotacionMeses(new Date("2026-01-10T12:00:00Z"));
+    expect(m.actual).toBe("2025-12");
+    expect(m.mesPasado).toBe("2025-11");
+    expect(m.anioPasado).toBe("2024-12");
+  });
+});
+
+describe("monthRange / addMonth / mesLabel", () => {
+  it("da el rango del mes con el último día correcto", () => {
+    expect(monthRange("2026-02")).toEqual({ desde: "2026-02-01", hasta: "2026-02-28" });
+    expect(monthRange("2024-02")).toEqual({ desde: "2024-02-01", hasta: "2024-02-29" }); // bisiesto
+    expect(monthRange("2026-06")).toEqual({ desde: "2026-06-01", hasta: "2026-06-30" });
+  });
+  it("suma y resta meses", () => {
+    expect(addMonth("2026-01", -1)).toBe("2025-12");
+    expect(addMonth("2026-06", -12)).toBe("2025-06");
+  });
+  it("nombra el mes en español", () => {
+    expect(mesLabel("2026-06")).toBe("junio 2026");
   });
 });
 
@@ -115,7 +137,7 @@ describe("normalizeRotacionParams", () => {
     expect(normalizeRotacionParams(null)).toEqual(ROTACION_DEFAULTS);
     expect(normalizeRotacionParams({ caidaMin: 5 }).caidaMin).toBe(1);
     expect(normalizeRotacionParams({ caidaMin: -1 }).caidaMin).toBe(0);
-    expect(normalizeRotacionParams({ ventanaDias: 0 }).ventanaDias).toBe(ROTACION_DEFAULTS.ventanaDias);
+    expect(normalizeRotacionParams({ minUnidadesRef: 10 }).minUnidadesRef).toBe(10);
   });
 });
 

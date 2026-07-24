@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { computeSinRotacion, getSinRotacionConfig } from "@/lib/rotacion.server";
-import { motivoLabel } from "@/lib/rotacion";
+import { motivoLabel, mesLabel } from "@/lib/rotacion";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,17 +20,17 @@ export async function GET() {
     );
   }
 
-  const { ventana, items, summary } = report;
+  const { meses, items, summary } = report;
   const pct = (v: number | null) => (v === null ? "" : `${Math.round(v * 100)}%`);
 
   const header = [
     "Código padre",
     "Título",
-    "Venta actual",
-    "Venta mes pasado",
-    "Venta año pasado",
-    "Caída vs mes",
-    "Caída vs año",
+    `Venta ${mesLabel(meses.actual)}`,
+    `Venta ${mesLabel(meses.mesPasado)}`,
+    `Venta ${mesLabel(meses.anioPasado)}`,
+    "Caída vs mes pasado",
+    "Caída vs año pasado",
     "Unidades perdidas",
     "Stock",
     "En camino",
@@ -53,9 +53,8 @@ export async function GET() {
 
   const info = [
     ["Reporte: Publicaciones sin rotación"],
-    [`Actual: ${ventana.actualDesde} a ${ventana.actualHasta}`],
-    [`Mes pasado: ${ventana.mesDesde} a ${ventana.mesHasta}`],
-    [`Año pasado: ${ventana.anioDesde} a ${ventana.anioHasta}${report.hayDatosAnioPasado ? "" : " (sin datos)"}`],
+    [`Mes analizado: ${mesLabel(meses.actual)} (comparado con ${mesLabel(meses.mesPasado)} y ${mesLabel(meses.anioPasado)})`],
+    [report.hayDatosAnioPasado ? "" : "Sin datos del año pasado en la fuente"],
     [`Total: ${summary.total} · sin stock: ${summary.sinStock} · con stock: ${summary.conStock} · unidades perdidas: ${summary.unidadesPerdidas}`],
     [],
   ];
@@ -70,7 +69,7 @@ export async function GET() {
   XLSX.utils.book_append_sheet(wb, ws, "Sin rotación");
 
   const buf: Buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
-  const filename = `sin-rotacion_${ventana.actualHasta}.xlsx`;
+  const filename = `sin-rotacion_${meses.actual}.xlsx`;
 
   return new NextResponse(new Uint8Array(buf), {
     headers: {

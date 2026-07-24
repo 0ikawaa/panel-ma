@@ -11,13 +11,11 @@
 export const SIN_ROTACION_KEY = "sin-rotacion";
 
 export type RotacionParams = {
-  ventanaDias: number; // tamaño de cada ventana de comparación (default 30)
   minUnidadesRef: number; // mínimo que vendía antes para tenerlo en cuenta
   caidaMin: number; // caída mínima (0..1) para marcarlo (ej. 0,5 = 50%)
 };
 
 export const ROTACION_DEFAULTS: RotacionParams = {
-  ventanaDias: 30,
   minUnidadesRef: 5,
   caidaMin: 0.5,
 };
@@ -30,7 +28,6 @@ export function normalizeRotacionParams(p?: Partial<RotacionParams> | null): Rot
   };
   const caidaRaw = Number(src.caidaMin);
   return {
-    ventanaDias: Math.max(1, pos(src.ventanaDias, ROTACION_DEFAULTS.ventanaDias, 1)),
     minUnidadesRef: pos(src.minUnidadesRef, ROTACION_DEFAULTS.minUnidadesRef),
     // caidaMin: si es un número, se recorta a [0, 1]; si no, cae al default.
     caidaMin: Number.isFinite(caidaRaw)
@@ -82,15 +79,9 @@ export type RotacionItem = {
 export type RotacionReport = {
   key: typeof SIN_ROTACION_KEY;
   generadoEn: string;
-  ventana: {
-    actualDesde: string;
-    actualHasta: string;
-    mesDesde: string;
-    mesHasta: string;
-    anioDesde: string;
-    anioHasta: string;
-  };
-  hayDatosAnioPasado: boolean; // false si la fuente no tiene ventas de hace un año
+  // Los tres meses calendario comparados, en formato "YYYY-MM".
+  meses: { actual: string; mesPasado: string; anioPasado: string };
+  hayDatosAnioPasado: boolean; // false si la fuente no tiene ventas de ese mes
   params: RotacionParams;
   items: RotacionItem[];
   summary: {
@@ -101,22 +92,45 @@ export type RotacionReport = {
   };
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Fecha YYYY-MM-DD en horario de Uruguay (UTC-3, sin horario de verano). */
-export function uyDate(d: Date): string {
-  return new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+/** Mes "YYYY-MM" en horario de Uruguay (UTC-3, sin horario de verano). */
+export function monthKeyUY(d: Date): string {
+  return new Date(d.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 7);
 }
 
-/** Las tres ventanas de comparación a partir de "hoy" (UY). */
-export function rotacionWindows(ventanaDias: number, now: Date) {
-  const actualHasta = uyDate(now);
-  const actualDesde = uyDate(new Date(now.getTime() - (ventanaDias - 1) * DAY_MS));
-  const mesHasta = uyDate(new Date(now.getTime() - ventanaDias * DAY_MS));
-  const mesDesde = uyDate(new Date(now.getTime() - (2 * ventanaDias - 1) * DAY_MS));
-  const anioHasta = uyDate(new Date(now.getTime() - 365 * DAY_MS));
-  const anioDesde = uyDate(new Date(now.getTime() - (365 + ventanaDias - 1) * DAY_MS));
-  return { actualDesde, actualHasta, mesDesde, mesHasta, anioDesde, anioHasta };
+/** Suma/resta meses a un "YYYY-MM". */
+export function addMonth(ym: string, delta: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const idx = y * 12 + (m - 1) + delta;
+  const ny = Math.floor(idx / 12);
+  const nm = (idx % 12) + 1;
+  return `${ny}-${String(nm).padStart(2, "0")}`;
+}
+
+/** Rango de fechas [desde, hasta] (YYYY-MM-DD) de un mes calendario. */
+export function monthRange(ym: string): { desde: string; hasta: string } {
+  const [y, m] = ym.split("-").map(Number);
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate(); // día 0 del mes siguiente
+  return { desde: `${ym}-01`, hasta: `${ym}-${String(last).padStart(2, "0")}` };
+}
+
+/**
+ * Los tres meses calendario a comparar a partir de "hoy" (UY): el último mes
+ * CERRADO (actual), el mes anterior, y el mismo mes del año pasado. Al cambiar
+ * el mes, estos tres avanzan solos.
+ */
+export function rotacionMeses(now: Date) {
+  const enCurso = monthKeyUY(now);
+  const actual = addMonth(enCurso, -1); // último mes completo
+  const mesPasado = addMonth(actual, -1);
+  const anioPasado = addMonth(actual, -12);
+  return { actual, mesPasado, anioPasado };
+}
+
+/** Nombre legible de un "YYYY-MM", ej. "junio 2026". */
+const MESES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+export function mesLabel(ym: string): string {
+  const [y, m] = ym.split("-").map(Number);
+  return `${MESES_ES[m - 1] ?? ym} ${y}`;
 }
 
 /**

@@ -2,11 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { fmtInt, fmtDateTime } from "@/lib/format";
-import { motivoLabel, type Motivo, type RotacionItem, type RotacionParams } from "@/lib/rotacion";
+import { motivoLabel, mesLabel, type Motivo, type RotacionItem, type RotacionParams } from "@/lib/rotacion";
 
-type Config = { params: RotacionParams };
 type Summary = { total: number; sinStock: number; conStock: number; unidadesPerdidas: number };
-type Ventana = { actualDesde: string; actualHasta: string; mesDesde: string; mesHasta: string; anioDesde: string; anioHasta: string };
+type Meses = { actual: string; mesPasado: string; anioPasado: string };
 
 const motivoTone: Record<Motivo, string> = {
   "sin-stock": "bg-red-500/15 text-red-300",
@@ -17,7 +16,7 @@ const motivoTone: Record<Motivo, string> = {
 export default function ReporteSinRotacion() {
   const [items, setItems] = useState<RotacionItem[]>([]);
   const [summary, setSummary] = useState<Summary>({ total: 0, sinStock: 0, conStock: 0, unidadesPerdidas: 0 });
-  const [ventana, setVentana] = useState<Ventana | null>(null);
+  const [meses, setMeses] = useState<Meses | null>(null);
   const [hayAnio, setHayAnio] = useState(true);
   const [generadoEn, setGeneradoEn] = useState<string | null>(null);
   const [p, setP] = useState<RotacionParams | null>(null);
@@ -41,7 +40,7 @@ export default function ReporteSinRotacion() {
       if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
       setItems(j.report.items);
       setSummary(j.report.summary);
-      setVentana(j.report.ventana);
+      setMeses(j.report.meses);
       setHayAnio(j.report.hayDatosAnioPasado);
       setGeneradoEn(j.report.generadoEn);
       setP(j.config.params);
@@ -93,10 +92,11 @@ export default function ReporteSinRotacion() {
       {/* ---------- Barra de acciones ---------- */}
       <div className="card flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:p-4">
         <div className="min-w-0 text-sm text-zinc-400">
-          {ventana ? (
+          {meses ? (
             <>
-              Actual <span className="text-zinc-300">{ventana.actualDesde} → {ventana.actualHasta}</span> · vs mes pasado y
-              año pasado{generadoEn ? ` · ${fmtDateTime(generadoEn)}` : ""}
+              Analizando <span className="font-semibold text-zinc-200">{mesLabel(meses.actual)}</span> · vs{" "}
+              {mesLabel(meses.mesPasado)} y {mesLabel(meses.anioPasado)}
+              {generadoEn ? ` · ${fmtDateTime(generadoEn)}` : ""}
               {!hayAnio && <span className="ml-1 text-amber-400/80">(sin datos del año pasado)</span>}
             </>
           ) : (
@@ -147,8 +147,7 @@ export default function ReporteSinRotacion() {
         </button>
         {showCfg && p && (
           <div className="space-y-4 border-t border-white/10 p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <NumField label="Ventana de cada período (días)" value={p.ventanaDias} onChange={(v) => setParam("ventanaDias", v)} />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <NumField label="Mín. unidades que vendía antes" value={p.minUnidadesRef} onChange={(v) => setParam("minUnidadesRef", v)} />
               <NumField label="Caída mínima (%)" value={Math.round(p.caidaMin * 100)} step={5} onChange={(v) => setParam("caidaMin", Math.min(100, Math.max(0, v)) / 100)} />
             </div>
@@ -192,9 +191,9 @@ export default function ReporteSinRotacion() {
                 <tr>
                   <th className="px-3 py-3 text-left font-semibold">Código padre</th>
                   <th className="px-3 py-3 text-left font-semibold">Título</th>
-                  <th className="px-3 py-3 text-right font-semibold">Actual</th>
-                  <th className="px-3 py-3 text-right font-semibold">Mes pasado</th>
-                  <th className="px-3 py-3 text-right font-semibold">Año pasado</th>
+                  <th className="px-3 py-3 text-right font-semibold">{meses ? mesLabel(meses.actual) : "Actual"}</th>
+                  <th className="px-3 py-3 text-right font-semibold">{meses ? mesLabel(meses.mesPasado) : "Mes pasado"}</th>
+                  <th className="px-3 py-3 text-right font-semibold">{meses ? mesLabel(meses.anioPasado) : "Año pasado"}</th>
                   <th className="px-3 py-3 text-right font-semibold">Caída</th>
                   <th className="px-3 py-3 text-right font-semibold">Perdidas</th>
                   <th className="px-3 py-3 text-right font-semibold">Stock</th>
@@ -229,10 +228,12 @@ export default function ReporteSinRotacion() {
       )}
 
       <p className="px-1 text-xs leading-relaxed text-zinc-500">
-        Se marca un código padre cuando vendía al menos <b>{p?.minUnidadesRef ?? 5}</b> unidades (el mes pasado o el año pasado) y
-        ahora vende <b>≥ {Math.round((p?.caidaMin ?? 0.5) * 100)}%</b> menos. «Motivo probable»: <b>Sin stock</b> = está agotado
-        (probablemente por eso dejó de venderse); <b>Con stock — no rota</b> = tiene stock pero igual cayó, así que el tema es la
-        publicación (precio, pausada, competencia) o la demanda. Ventas = ML + Odoo (local, mayorista y otros), sin duplicar ML.
+        Compara el último mes cerrado{meses ? ` (${mesLabel(meses.actual)})` : ""} contra el mes anterior y el mismo mes del año
+        pasado; los tres avanzan solos al cambiar de mes. Se marca un código padre cuando vendía al menos{" "}
+        <b>{p?.minUnidadesRef ?? 5}</b> unidades (el mes pasado o el año pasado) y ahora vende <b>≥ {Math.round((p?.caidaMin ?? 0.5) * 100)}%</b>{" "}
+        menos. «Motivo probable»: <b>Sin stock</b> = está agotado (probablemente por eso dejó de venderse); <b>Con stock — no rota</b> ={" "}
+        tiene stock pero igual cayó (revisar publicación: precio, pausada, competencia). Meses recientes en vivo de MUNDO SHOP; el año
+        pasado, del histórico del negocio. Ventas = ML + Odoo, sin duplicar ML.
       </p>
     </div>
   );
