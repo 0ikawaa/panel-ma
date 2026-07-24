@@ -25,6 +25,20 @@ const REPORTES = [
     tag: "En vivo",
     activo: true,
   },
+  {
+    href: "/reportes/calidad",
+    titulo: "Calidad de las publicaciones",
+    desc: "Publicaciones activas cuya calidad (health de ML) no está al máximo, con la lista de objetivos concretos a cumplir para subirla: foto principal, fotos, ficha técnica, carrito, infracciones y visibilidad.",
+    tag: "En vivo",
+    activo: true,
+  },
+  {
+    href: "/reportes/publicaciones",
+    titulo: "Publicaciones a revisar",
+    desc: "Publicaciones inactivas en ML que todavía tienen stock en Odoo (con el motivo de por qué están pausadas o cerradas), y publicaciones activas que no venden hace semanas o meses (configurable).",
+    tag: "En vivo",
+    activo: true,
+  },
 ];
 
 export default function ReportesPage() {

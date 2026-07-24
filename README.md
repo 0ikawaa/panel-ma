@@ -17,7 +17,7 @@ con base **Postgres (Neon)**. Los datos de ventas y stock se leen en vivo de la 
 | **Dashboard** | Panorama general del negocio. |
 | **Importaciones** | • **Resumen** de importaciones · • **Tablero** kanban de embarques (con adjuntos) · • **Embarques**: subís el Excel de cada contenedor y muestra foto, código, FOB, CBM y totales (extrae las fotos incrustadas en las celdas) · • **Calculadora** de costo nacionalizado · • **Buscar SKU**. |
 | **Ventas** | • **Resumen de Ventas** (ML + Odoo local/mayorista/otros) · • **Rentabilidad por SKU** · • **Órdenes ML** en tiempo real · • **Reposición** (cruza ventas con stock y sugiere cuánto pedir). |
-| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear). |
+| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear) · • **Calidad de las publicaciones** (health de ML + objetivos a cumplir) · • **Publicaciones a revisar** (inactivas con stock en Odoo y su motivo + activas sin ventas en una ventana configurable). |
 | **Administración** | Gestión de usuarios y sus módulos, backups. |
 
 El menú (sidebar y nav móvil) muestra a cada usuario solo los módulos que tiene habilitados.
@@ -133,7 +133,7 @@ src/
   lib/                     -> lógica pura + acceso a datos (con tests .test.ts)
     mundoshop.ts           -> cliente de la API externa
     modules.ts             -> definición de módulos y control de acceso
-    reportes.* rotacion.* cancelaciones.*  -> lógica de los reportes
+    reportes.* rotacion.* cancelaciones.* calidad.* publicaciones.*  -> lógica de los reportes
     excel.ts               -> parseo del Excel de contenedores (incluye fotos)
   middleware.ts            -> sesión + control de acceso por módulo
 prisma/schema.prisma       -> modelos de la base propia (Postgres)
