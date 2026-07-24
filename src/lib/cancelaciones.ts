@@ -35,6 +35,8 @@ export type DailyRow = {
 export type CancelPeriodo = {
   key: string;
   label: string;
+  desde: string; // YYYY-MM-DD (para pedir el detalle)
+  hasta: string;
   parcial: boolean;
   totalOrdenes: number;
   canceladas: number;
@@ -121,6 +123,8 @@ export function bucketByPeriodo(daily: DailyRow[], periodos: PeriodoDef[]): Canc
     return {
       key: p.key,
       label: p.label,
+      desde: p.desde,
+      hasta: p.hasta,
       parcial: p.parcial,
       totalOrdenes,
       canceladas,

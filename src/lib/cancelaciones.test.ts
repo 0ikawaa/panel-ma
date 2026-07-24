@@ -57,7 +57,7 @@ describe("buildComparacion", () => {
 
   it("devuelve nulls si no hay dos períodos cerrados", () => {
     const c = buildComparacion([
-      { key: "x", label: "x", parcial: true, totalOrdenes: 1, canceladas: 0, noPagada: 0, fraude: 0, otras: 0, tasa: 0 },
+      { key: "x", label: "x", desde: "2026-07-01", hasta: "2026-07-07", parcial: true, totalOrdenes: 1, canceladas: 0, noPagada: 0, fraude: 0, otras: 0, tasa: 0 },
     ]);
     expect(c.actual).toBeNull();
     expect(c.deltaPct).toBeNull();
@@ -67,8 +67,8 @@ describe("buildComparacion", () => {
 describe("totalizar", () => {
   it("suma todos los períodos", () => {
     const t = totalizar([
-      { key: "a", label: "", parcial: false, totalOrdenes: 100, canceladas: 10, noPagada: 8, fraude: 1, otras: 1, tasa: 0.1 },
-      { key: "b", label: "", parcial: false, totalOrdenes: 100, canceladas: 20, noPagada: 20, fraude: 0, otras: 0, tasa: 0.2 },
+      { key: "a", label: "", desde: "2026-06-01", hasta: "2026-06-30", parcial: false, totalOrdenes: 100, canceladas: 10, noPagada: 8, fraude: 1, otras: 1, tasa: 0.1 },
+      { key: "b", label: "", desde: "2026-07-01", hasta: "2026-07-31", parcial: false, totalOrdenes: 100, canceladas: 20, noPagada: 20, fraude: 0, otras: 0, tasa: 0.2 },
     ]);
     expect(t).toMatchObject({ totalOrdenes: 200, canceladas: 30, noPagada: 28, fraude: 1 });
     expect(t.tasa).toBeCloseTo(0.15, 5);
