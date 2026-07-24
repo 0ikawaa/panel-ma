@@ -1,113 +1,121 @@
-# MA Importaciones · Plataforma de Arribos
+# Panel MA · MA Importaciones
 
-Plataforma interna para gestionar **arribos / contenedores**: subís el Excel de cada
-contenedor y la plataforma muestra, línea a línea, la **foto**, el **código**, el
-**precio en China**, la **cantidad por caja**, el **CBM unitario** y el **CBM total**,
-con los totales de volumen. Ideal para mostrar lo que viene y cuánto ocupa.
+Plataforma interna de **MA Importaciones** para gestionar todo el negocio en un solo lugar:
+importaciones (contenedores/arribos), ventas (MercadoLibre + Odoo), reposición, rentabilidad
+y una sección de **reportes** analíticos. El acceso se controla **por módulos** según el usuario.
 
-Construida con **Next.js + Prisma + Tailwind**. Las fotos incrustadas en las celdas del
-Excel se extraen automáticamente (soporta imágenes ancladas de Excel y el formato
-DISPIMG de WPS, muy usado por proveedores chinos).
+Construida con **Next.js 16 · React 19 · Prisma · Tailwind · TypeScript**, desplegada en **Vercel**
+con base **Postgres (Neon)**. Los datos de ventas y stock se leen en vivo de la API externa
+**MUNDO SHOP** (espejo de solo lectura de Odoo + MercadoLibre).
 
 ---
 
-## 🔐 Acceso
+## 🧭 Módulos
 
-- Usuario: **admin**
-- Contraseña: **admin**
+| Sección | Qué hace |
+|---|---|
+| **Dashboard** | Panorama general del negocio. |
+| **Importaciones** | • **Resumen** de importaciones · • **Tablero** kanban de embarques (con adjuntos) · • **Embarques**: subís el Excel de cada contenedor y muestra foto, código, FOB, CBM y totales (extrae las fotos incrustadas en las celdas) · • **Calculadora** de costo nacionalizado · • **Buscar SKU**. |
+| **Ventas** | • **Resumen de Ventas** (ML + Odoo local/mayorista/otros) · • **Rentabilidad por SKU** · • **Órdenes ML** en tiempo real · • **Reposición** (cruza ventas con stock y sugiere cuánto pedir). |
+| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear). |
+| **Administración** | Gestión de usuarios y sus módulos, backups. |
 
-Se configuran en el archivo `.env` (`ADMIN_USER` y `ADMIN_PASSWORD`).
+El menú (sidebar y nav móvil) muestra a cada usuario solo los módulos que tiene habilitados.
+La app es **PWA** (se puede instalar como app en iOS/Android).
+
+---
+
+## 🗄️ Fuentes de datos
+
+- **Postgres (Neon)** vía Prisma — datos propios de la plataforma: contenedores y sus productos,
+  usuarios, configuración y corridas de reportes, overrides de costo, histórico mensual, etc.
+- **API MUNDO SHOP** (`src/lib/mundoshop.ts`) — base **SQLite de solo lectura** con datos de Odoo +
+  MercadoLibre (órdenes, ítems, stock, envíos…). Se consulta con SQL (`SELECT`) autenticando por
+  header `x-api-key`. **Nunca se expone al navegador**: siempre se llama desde el servidor.
+
+Modelos Prisma: `Container`, `ContainerDoc`, `Product`, `Reposicion`, `CostOverride`, `User`,
+`Profile`, `ReportConfig`, `ReportRun`, `ProductOrigin`, `VentaHistorica`.
 
 ---
 
 ## 🚀 Correr en tu PC (local)
 
-1. Instalá las dependencias (solo la primera vez):
+1. Instalá dependencias (solo la primera vez):
 
    ```bash
    npm install
    ```
 
-2. Creá el archivo `.env` (copiá `.env.example` y ajustá si querés):
+2. Creá el `.env` a partir del ejemplo y completá los valores (ver más abajo):
 
    ```bash
    cp .env.example .env
    ```
 
-3. Preparás la base de datos (solo la primera vez):
+3. Creá/actualizá las tablas en la base (solo la primera vez o al cambiar el schema):
 
    ```bash
-   npx prisma migrate dev
+   npx prisma db push
    ```
 
-4. Arrancás la plataforma:
+4. Arrancá la plataforma:
 
    ```bash
    npm run dev
    ```
 
-5. Abrí **http://localhost:3000** en el navegador.
+5. Abrí **http://localhost:3000**. Acceso inicial: usuario/clave de `ADMIN_USER` / `ADMIN_PASSWORD`.
 
-Para el uso diario, con `npm run dev` alcanza.
-
----
-
-## 📄 Formato del Excel
-
-La primera hoja debe tener una fila de encabezados con columnas parecidas a:
-
-| Foto | Código | Precio China | Cantidad por caja | CBM unitario | CBM total |
-|------|--------|--------------|-------------------|--------------|-----------|
-
-- Los nombres no tienen que ser exactos: detecta variantes (ej. "Precio China (USD)",
-  "Cant. por caja", "Codigo", "CBM u.", etc.).
-- Las **fotos** deben estar incrustadas en la columna Foto.
-- Si falta el CBM total pero está el unitario y la cantidad, se calcula solo (y viceversa).
-- Subir un Excel nuevo **reemplaza** los productos de ese contenedor.
-
----
-
-## ☁️ Subir a GitHub y a la nube
-
-### 1. GitHub
-
-El proyecto ya tiene git inicializado. Para subirlo:
+Otros comandos:
 
 ```bash
-git add .
-git commit -m "Plataforma de arribos"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/TU_REPO.git
-git push -u origin main
+npm test        # corre los tests (Vitest)
+npm run lint    # ESLint
+npm run build   # build de producción (corre prisma generate + prisma db push + next build)
 ```
 
-> El `.env` y la base local (`prisma/dev.db`) **no** se suben (están en `.gitignore`).
+> La base es **Postgres**. En local podés apuntar `DATABASE_URL` a un Neon de desarrollo o a un
+> Postgres local. El esquema se gestiona con `prisma db push` (no hay carpeta de migraciones).
 
-### 2. Base de datos en la nube (Postgres)
+---
 
-SQLite es perfecto en local, pero en la nube (Vercel) el disco es efímero, así que
-para producción conviene Postgres (gratis en **Neon** o **Supabase**):
+## 🔐 Variables de entorno (`.env`)
 
-1. Creá una base Postgres gratis y copiá su cadena de conexión.
-2. En `prisma/schema.prisma` cambiá el provider:
+| Variable | Para qué |
+|---|---|
+| `DATABASE_URL` | Postgres (Neon) — conexión *pooled*. |
+| `DATABASE_URL_UNPOOLED` | Postgres — conexión directa (la usa Prisma para el schema). |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | Superadmin (acceso a todos los módulos, sin fila en la tabla de usuarios). |
+| `AUTH_SECRET` | Secreto para firmar la cookie de sesión (poné uno largo y aleatorio). |
+| `MUNDOSHOP_BASE_URL` / `MUNDOSHOP_API_KEY` | API externa de Odoo + MercadoLibre. |
+| `CRON_SECRET` | Protege el endpoint del cron diario de reportes. |
+| `REPORT_WHATSAPP_TO` | Número(s) destino del reporte por WhatsApp (opcional). |
+| `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Envío por WhatsApp vía Meta Cloud API (opcional; si faltan, el reporte igual se genera y se muestra). |
 
-   ```prisma
-   datasource db {
-     provider = "postgresql"
-     url      = env("DATABASE_URL")
-   }
-   ```
+El `.env` y cualquier base local están en `.gitignore` (no se suben). Ver `.env.example`.
 
-3. Poné esa cadena en `DATABASE_URL` (en `.env` local y en las variables de entorno
-   del hosting).
-4. Ejecutá `npx prisma migrate deploy`.
+---
 
-### 3. Desplegar en Vercel
+## ⏰ Reportes automáticos (cron)
 
-1. Importá el repo de GitHub en [vercel.com](https://vercel.com).
-2. Cargá las variables de entorno: `DATABASE_URL`, `ADMIN_USER`, `ADMIN_PASSWORD`,
-   `AUTH_SECRET`.
-3. Deploy. Vercel corre `npm run build` automáticamente.
+El reporte **Ventas aceleradas** puede correr y enviarse solo todos los días. Está configurado en
+`vercel.json`:
+
+```json
+{ "crons": [ { "path": "/api/cron/reportes", "schedule": "0 12 * * *" } ] }
+```
+
+`12:00 UTC` = **09:00 de Uruguay** (UTC-3). El endpoint valida el header `Authorization: Bearer $CRON_SECRET`,
+así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para que funcione.
+
+---
+
+## ☁️ Deploy en Vercel
+
+1. El repo está conectado a Vercel: **cada push a `main` dispara un deploy** de producción.
+2. Cargar las variables de entorno (las de la tabla de arriba) en *Settings → Environment Variables*.
+3. El `build` corre `prisma generate && prisma db push`, así que los cambios de schema se aplican
+   automáticamente contra la base de producción en cada deploy.
 
 ---
 
@@ -116,13 +124,46 @@ para producción conviene Postgres (gratis en **Neon** o **Supabase**):
 ```
 src/
   app/
-    (app)/            -> páginas con sesión (Inicio, Arribos, detalle)
-    api/              -> login, logout, contenedores, subida de Excel
-    login/            -> pantalla de acceso
-  components/         -> UI (tabla, subida, modales, menú)
-  lib/
-    excel.ts          -> parser de Excel + extracción de fotos
-    prisma.ts         -> conexión a la base
-    auth.ts           -> sesiones
-prisma/schema.prisma  -> modelo de datos (Contenedor, Producto)
+    (app)/                 -> páginas con sesión, agrupadas por módulo
+      dashboard/  arribos/  resumen/  rentabilidad/  ordenes/
+      reposicion/  reportes/  admin/  page.tsx (Resumen Importaciones)
+    api/                   -> endpoints (login, containers, resumen, reportes, cron, admin…)
+    login/                 -> pantalla de acceso
+  components/              -> UI (Sidebar, MobileNav, tablas y componentes de cada reporte)
+  lib/                     -> lógica pura + acceso a datos (con tests .test.ts)
+    mundoshop.ts           -> cliente de la API externa
+    modules.ts             -> definición de módulos y control de acceso
+    reportes.* rotacion.* cancelaciones.*  -> lógica de los reportes
+    excel.ts               -> parseo del Excel de contenedores (incluye fotos)
+  middleware.ts            -> sesión + control de acceso por módulo
+prisma/schema.prisma       -> modelos de la base propia (Postgres)
+vercel.json                -> cron de reportes
 ```
+
+Convención: la **lógica pura** vive en `*.ts` (testeable con Vitest) y lo que toca red/base en
+`*.server.ts`.
+
+---
+
+## 📄 Formato del Excel de contenedores
+
+La primera hoja debe tener una fila de encabezados con columnas como **Foto · Código · Precio China (FOB) ·
+Cantidad por caja · CBM unitario · CBM total** (los nombres no tienen que ser exactos: detecta variantes).
+Las **fotos** deben estar incrustadas en la columna Foto — soporta imágenes ancladas de Excel y el formato
+**DISPIMG** de WPS (habitual en proveedores chinos). Si falta el CBM total pero está el unitario y la
+cantidad, se calcula solo. Subir un Excel nuevo **reemplaza** los productos de ese contenedor.
+
+---
+
+## 🔒 Acceso y usuarios
+
+- El **superadmin** entra con `ADMIN_USER`/`ADMIN_PASSWORD` y ve todos los módulos.
+- Los demás usuarios se crean desde **Administración**, con los módulos que cada uno puede ver.
+- La sesión es una cookie firmada (JWT con `jose`); el `middleware.ts` valida sesión y permisos por ruta.
+
+---
+
+## ⚠️ Nota para desarrollo
+
+Este proyecto usa **Next.js 16**, que trae cambios respecto de versiones anteriores. Antes de tocar
+código, leé la guía correspondiente en `node_modules/next/dist/docs/` (ver `AGENTS.md`).
