@@ -13,6 +13,7 @@ const NAV = [
   { href: "/rentabilidad", module: "resumen", label: "Rentabilidad" },
   { href: "/ordenes", module: "ordenes", label: "Órdenes ML" },
   { href: "/reposicion", module: "reposicion", label: "Reposición" },
+  { href: "/reportes", module: "reportes", label: "Reportes" },
   { href: "/admin", module: "admin", label: "Admin" },
 ];
 

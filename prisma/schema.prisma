@@ -122,3 +122,29 @@ model Profile {
   photoUrl  String? // URL de la foto de perfil (Vercel Blob)
   updatedAt DateTime @updatedAt
 }
+
+/// Configuración de un reporte de la sección Reportes. Una fila por reporte
+/// (key = "ventas-aceleradas"). Guarda el número de WhatsApp destino y los
+/// umbrales, editables desde la pantalla.
+model ReportConfig {
+  key        String   @id // identificador del reporte, ej. "ventas-aceleradas"
+  enabled    Boolean  @default(true) // si el envío automático (cron) está activo
+  whatsappTo String? // números destino en E.164 sin "+", separados por coma
+  params     Json? // umbrales del reporte (ventanaDias, baseDias, ratioMin, ...)
+  updatedAt  DateTime @updatedAt
+}
+
+/// Una corrida de un reporte (manual o automática). Guarda el snapshot de los
+/// SKUs marcados para poder mostrarlo en la sección y saber qué se envió.
+model ReportRun {
+  id             String   @id @default(cuid())
+  reportKey      String // "ventas-aceleradas"
+  trigger        String   @default("manual") // "manual" | "cron"
+  items          Json // SKUs en riesgo detectados (snapshot)
+  summary        Json // { total, unidadesRiesgo, ... }
+  whatsappStatus String? // "sent" | "skipped:<motivo>" | "error:<detalle>"
+  whatsappTo     String? // a qué número(s) se envió
+  createdAt      DateTime @default(now())
+
+  @@index([reportKey, createdAt])
+}

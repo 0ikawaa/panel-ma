@@ -242,6 +242,18 @@ export default function Sidebar({
           </div>
         )}
 
+        {can("reportes") && (
+          <Link href="/reportes" className={linkClass(pathname.startsWith("/reportes"))}>
+            {icon(
+              <>
+                <path d="M4 4v16h16" />
+                <path d="M8 16v-4M12 16V8M16 16v-6" />
+              </>,
+            )}
+            Reportes
+          </Link>
+        )}
+
         {can("admin") && (
           <Link href="/admin" className={linkClass(pathname.startsWith("/admin"))}>
             {icon(

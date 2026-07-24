@@ -13,6 +13,7 @@ export const MODULES: ModuleDef[] = [
   { key: "resumen", label: "Resumen Ventas", path: "/resumen" },
   { key: "ordenes", label: "Órdenes ML", path: "/ordenes" },
   { key: "reposicion", label: "Reposición", path: "/reposicion" },
+  { key: "reportes", label: "Reportes", path: "/reportes" },
   { key: "admin", label: "Administración", path: "/admin" },
 ];
 
@@ -25,12 +26,15 @@ export function moduleForPath(pathname: string): string | null {
   // Buscar SKU es parte de Importaciones (Embarques).
   if (pathname.startsWith("/arribos") || pathname.startsWith("/buscar")) return "embarques";
   if (pathname.startsWith("/reposicion")) return "reposicion";
+  if (pathname.startsWith("/reportes")) return "reportes";
   if (pathname.startsWith("/ordenes")) return "ordenes";
   // La rentabilidad por SKU muestra costos y márgenes: mismo público que Resumen.
   if (pathname.startsWith("/resumen") || pathname.startsWith("/rentabilidad")) return "resumen";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/api/admin")) return "admin";
   if (pathname.startsWith("/api/reposicion")) return "reposicion";
+  // /api/reportes: protegido por módulo. /api/cron NO (lo protege CRON_SECRET).
+  if (pathname.startsWith("/api/reportes")) return "reportes";
   if (pathname.startsWith("/api/containers")) return "embarques";
   if (pathname.startsWith("/api/ventas-ml") || pathname.startsWith("/api/costos")) return "ordenes";
   if (pathname.startsWith("/api/resumen") || pathname.startsWith("/api/rentabilidad")) return "resumen";
