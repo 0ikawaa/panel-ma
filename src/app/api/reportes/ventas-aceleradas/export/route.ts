@@ -24,6 +24,7 @@ export async function GET() {
   const header = [
     "Código",
     "Título",
+    "Origen",
     `u/día (últimos ${params.ventanaDias}d)`,
     `u/día (histórico ${params.baseDias}d)`,
     "Aceleración",
@@ -32,6 +33,7 @@ export async function GET() {
     "Stock",
     "En camino",
     "Días de cobertura",
+    "Meses a pedir",
     "Pedir (u)",
   ];
 
@@ -39,6 +41,7 @@ export async function GET() {
   const rows = items.map((r) => [
     r.sku,
     r.titulo ?? "",
+    r.origen === "brasil" ? "Brasil" : "China",
     round(r.velReciente),
     round(r.velBase),
     r.sinHistorial ? "nuevo" : `${round(r.aceleracion ?? 0, 1)}x`,
@@ -47,6 +50,7 @@ export async function GET() {
     r.stock ?? "",
     r.enCamino,
     r.diasCobertura === null ? "" : Math.round(r.diasCobertura),
+    r.mesesObjetivo,
     r.sugerido,
   ]);
 
@@ -62,8 +66,8 @@ export async function GET() {
   const aoa = [...info, header, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!cols"] = [
-    { wch: 14 }, { wch: 42 }, { wch: 16 }, { wch: 18 }, { wch: 12 },
-    { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 11 }, { wch: 16 }, { wch: 10 },
+    { wch: 14 }, { wch: 42 }, { wch: 8 }, { wch: 18 }, { wch: 20 }, { wch: 12 },
+    { wch: 16 }, { wch: 18 }, { wch: 10 }, { wch: 11 }, { wch: 16 }, { wch: 12 }, { wch: 10 },
   ];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Ventas aceleradas");

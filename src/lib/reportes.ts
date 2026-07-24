@@ -16,7 +16,8 @@ export type VentasAceleradasParams = {
   ratioMin: number; // aceleración mínima (velReciente / velBase) para marcar
   coberturaMax: number; // días de stock que quedan; por debajo = riesgo
   minUnidades: number; // mínimo de unidades vendidas en la ventana reciente
-  objetivoDias: number; // días de cobertura objetivo para la sugerencia de compra
+  mesesChina: number; // meses de cobertura a pedir para productos de China
+  mesesBrasil: number; // meses de cobertura a pedir para productos de Brasil
 };
 
 export const DEFAULT_PARAMS: VentasAceleradasParams = {
@@ -25,12 +26,18 @@ export const DEFAULT_PARAMS: VentasAceleradasParams = {
   ratioMin: 1.5,
   coberturaMax: 30,
   minUnidades: 5,
-  objetivoDias: 45,
+  mesesChina: 4,
+  mesesBrasil: 1,
 };
+
+// Días promedio por mes (mismo criterio que el módulo de Reposición).
+export const DIAS_POR_MES = 30.44;
+
+export type Origen = "china" | "brasil";
 
 /** Normaliza params parciales (ej. venidos de la config guardada) con defaults. */
 export function normalizeParams(p?: Partial<VentasAceleradasParams> | null): VentasAceleradasParams {
-  const src = p ?? {};
+  const src = (p ?? {}) as Partial<VentasAceleradasParams> & { objetivoDias?: number };
   const pos = (v: unknown, def: number, min = 0) => {
     const n = Number(v);
     return Number.isFinite(n) && n >= min ? n : def;
@@ -41,7 +48,8 @@ export function normalizeParams(p?: Partial<VentasAceleradasParams> | null): Ven
     ratioMin: pos(src.ratioMin, DEFAULT_PARAMS.ratioMin),
     coberturaMax: pos(src.coberturaMax, DEFAULT_PARAMS.coberturaMax),
     minUnidades: pos(src.minUnidades, DEFAULT_PARAMS.minUnidades),
-    objetivoDias: Math.max(1, pos(src.objetivoDias, DEFAULT_PARAMS.objetivoDias, 1)),
+    mesesChina: Math.max(0, pos(src.mesesChina, DEFAULT_PARAMS.mesesChina)),
+    mesesBrasil: Math.max(0, pos(src.mesesBrasil, DEFAULT_PARAMS.mesesBrasil)),
   };
 }
 
@@ -53,22 +61,25 @@ export type VentasAceleradasInput = {
   unidadesBase: number;
   stock: number | null;
   enCamino: number;
+  origen: Origen; // "china" (default) o "brasil" (según lista de códigos padre)
 };
 
 // Fila resultante marcada como en riesgo.
 export type VentasAceleradasItem = {
   sku: string;
   titulo: string | null;
+  origen: Origen;
   unidadesRecientes: number;
   unidadesBase: number;
   velReciente: number; // unidades/día en la ventana reciente
   velBase: number; // unidades/día en la ventana histórica
   aceleracion: number | null; // velReciente / velBase (null si no hay historial)
   sinHistorial: boolean; // no se vendía antes y ahora sí (producto que "explota")
-  stock: number | null;
+  stock: number | null; // disponible actual; nunca negativo (los negativos → 0)
   enCamino: number;
   diasCobertura: number | null; // días de stock que quedan al ritmo actual (null = infinito)
-  sugerido: number; // unidades sugeridas para llegar al objetivo de cobertura
+  mesesObjetivo: number; // meses de cobertura usados para la sugerencia (según origen)
+  sugerido: number; // unidades sugeridas para cubrir esos meses al ritmo actual
 };
 
 export type VentasAceleradasReport = {
@@ -120,28 +131,34 @@ export function scoreVentasAceleradas(
     // Filtro 2: se tiene que estar acelerando (o ser un producto nuevo que explota).
     if (!sinHistorial && (aceleracion as number) < params.ratioMin) continue;
 
-    const stockPos = Math.max(0, r.stock ?? 0);
-    const disponible = stockPos + Math.max(0, r.enCamino);
+    // Stock negativo (desajustes de Odoo) se toma como 0, tanto para el cálculo
+    // como para lo que se muestra.
+    const stockPos = r.stock === null ? null : Math.max(0, r.stock);
+    const disponible = (stockPos ?? 0) + Math.max(0, r.enCamino);
     const diasCobertura = velReciente > 0 ? disponible / velReciente : null;
 
     // Filtro 3: el stock + lo que viene NO alcanza a cubrir el ritmo actual.
     if (diasCobertura === null || diasCobertura > params.coberturaMax) continue;
 
-    const objetivo = velReciente * params.objetivoDias;
+    // Cuánto pedir: cobertura objetivo según el origen (China 4 meses, Brasil 1).
+    const mesesObjetivo = r.origen === "brasil" ? params.mesesBrasil : params.mesesChina;
+    const objetivo = velReciente * mesesObjetivo * DIAS_POR_MES;
     const sugerido = Math.max(0, Math.round(objetivo - disponible));
 
     out.push({
       sku: r.sku,
       titulo: r.titulo,
+      origen: r.origen,
       unidadesRecientes: r.unidadesRecientes,
       unidadesBase: r.unidadesBase,
       velReciente,
       velBase,
       aceleracion,
       sinHistorial,
-      stock: r.stock,
+      stock: stockPos,
       enCamino: r.enCamino,
       diasCobertura,
+      mesesObjetivo,
       sugerido,
     });
   }
@@ -190,9 +207,10 @@ export function reportToText(report: VentasAceleradasReport, max = 12): string {
     const cob = it.diasCobertura === null ? "—" : `${Math.round(it.diasCobertura)}d`;
     const accel = it.sinHistorial ? "nuevo" : `${fmt1(it.aceleracion ?? 0)}×`;
     const camino = it.enCamino > 0 ? `, ${it.enCamino} en camino` : ", sin reposición";
+    const origen = it.origen === "brasil" ? "🇧🇷" : "🇨🇳";
     const titulo = (it.titulo ?? it.sku).slice(0, 40);
-    lines.push(`• *${it.sku}* ${titulo}`);
-    lines.push(`   ${fmt1(it.velReciente)} u/día (${accel}) · quedan ${cob}${camino} · pedir ~${it.sugerido}`);
+    lines.push(`• ${origen} *${it.sku}* ${titulo}`);
+    lines.push(`   ${fmt1(it.velReciente)} u/día (${accel}) · quedan ${cob}${camino} · pedir ~${it.sugerido} (${it.mesesObjetivo}m)`);
   }
   if (items.length > max) lines.push(`… y ${items.length - max} más (ver en la plataforma).`);
   return lines.join("\n");

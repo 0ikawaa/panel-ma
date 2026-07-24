@@ -5,13 +5,32 @@ import {
   summarize,
   normalizeParams,
   DEFAULT_PARAMS,
+  DIAS_POR_MES,
   type VentasAceleradasInput,
 } from "./reportes";
 
-const P = { ...DEFAULT_PARAMS, ventanaDias: 30, baseDias: 90, ratioMin: 1.5, coberturaMax: 30, minUnidades: 5, objetivoDias: 45 };
+const P = {
+  ...DEFAULT_PARAMS,
+  ventanaDias: 30,
+  baseDias: 90,
+  ratioMin: 1.5,
+  coberturaMax: 30,
+  minUnidades: 5,
+  mesesChina: 4,
+  mesesBrasil: 1,
+};
 
 function input(over: Partial<VentasAceleradasInput>): VentasAceleradasInput {
-  return { sku: "100", titulo: "X", unidadesRecientes: 0, unidadesBase: 0, stock: 0, enCamino: 0, ...over };
+  return {
+    sku: "100",
+    titulo: "X",
+    unidadesRecientes: 0,
+    unidadesBase: 0,
+    stock: 0,
+    enCamino: 0,
+    origen: "china",
+    ...over,
+  };
 }
 
 describe("scoreVentasAceleradas", () => {
@@ -22,11 +41,22 @@ describe("scoreVentasAceleradas", () => {
     expect(it0).toBeTruthy();
     expect(it0.aceleracion).toBeCloseTo(6, 5);
     expect(it0.diasCobertura).toBeCloseTo(10, 5);
-    expect(it0.sugerido).toBe(70); // 2/día * 45 = 90 objetivo − 20 disponible
+    // China = 4 meses: 2/día * 4 * 30,44 = 243,52 objetivo − 20 disponible → 224.
+    expect(it0.mesesObjetivo).toBe(4);
+    expect(it0.sugerido).toBe(Math.round(2 * 4 * DIAS_POR_MES - 20));
+  });
+
+  it("pide menos para un producto de Brasil (1 mes) que de China (4 meses)", () => {
+    const base = { unidadesRecientes: 60, unidadesBase: 30, stock: 10 };
+    const [china] = scoreVentasAceleradas([input({ ...base, origen: "china" })], P);
+    const [brasil] = scoreVentasAceleradas([input({ ...base, origen: "brasil" })], P);
+    expect(china.mesesObjetivo).toBe(4);
+    expect(brasil.mesesObjetivo).toBe(1);
+    expect(brasil.sugerido).toBeLessThan(china.sugerido);
+    expect(brasil.sugerido).toBe(Math.round(2 * 1 * DIAS_POR_MES - 10));
   });
 
   it("descarta si hay stock de sobra aunque se acelere", () => {
-    // Misma aceleración pero stock 200 → cobertura 100 días > 30 → no marca.
     const res = scoreVentasAceleradas([input({ unidadesRecientes: 60, unidadesBase: 30, stock: 200 })], P);
     expect(res).toHaveLength(0);
   });
@@ -37,7 +67,6 @@ describe("scoreVentasAceleradas", () => {
   });
 
   it("descarta si no se está acelerando (ratio bajo)", () => {
-    // 30 u / 30d = 1/día; base 90 u / 90d = 1/día → accel 1x < 1,5.
     const res = scoreVentasAceleradas([input({ unidadesRecientes: 30, unidadesBase: 90, stock: 0 })], P);
     expect(res).toHaveLength(0);
   });
@@ -50,7 +79,6 @@ describe("scoreVentasAceleradas", () => {
   });
 
   it("cuenta lo que viene en camino como cobertura", () => {
-    // 60u/30d = 2/día, stock 0 pero 90 en camino → cobertura 45 días > 30 → no marca.
     const res = scoreVentasAceleradas([input({ unidadesRecientes: 60, unidadesBase: 30, stock: 0, enCamino: 90 })], P);
     expect(res).toHaveLength(0);
   });
@@ -64,9 +92,16 @@ describe("scoreVentasAceleradas", () => {
     expect(res.map((r) => r.sku)).toEqual(["B", "A"]);
   });
 
-  it("trata stock negativo (desajuste de Odoo) como 0", () => {
+  it("muestra el stock negativo (desajuste de Odoo) como 0", () => {
     const [it0] = scoreVentasAceleradas([input({ unidadesRecientes: 60, unidadesBase: 30, stock: -5 })], P);
+    expect(it0.stock).toBe(0);
     expect(it0.diasCobertura).toBe(0);
+  });
+
+  it("deja el stock en null cuando no hay dato en Odoo", () => {
+    const [it0] = scoreVentasAceleradas([input({ unidadesRecientes: 60, unidadesBase: 30, stock: null, enCamino: 10 })], P);
+    expect(it0.stock).toBeNull();
+    expect(it0.diasCobertura).toBeCloseTo(5, 5); // (0 + 10) / 2
   });
 });
 
@@ -91,9 +126,9 @@ describe("computeWindows", () => {
     const now = new Date("2026-07-24T15:00:00Z");
     const w = computeWindows(P, now);
     expect(w.recienteHasta).toBe("2026-07-24");
-    expect(w.recienteDesde).toBe("2026-06-25"); // 30 días atrás inclusive
-    expect(w.baseHasta).toBe("2026-06-24"); // día anterior al inicio reciente
-    expect(w.baseDesde).toBe("2026-03-27"); // 90 días más antes
+    expect(w.recienteDesde).toBe("2026-06-25");
+    expect(w.baseHasta).toBe("2026-06-24");
+    expect(w.baseDesde).toBe("2026-03-27");
   });
 });
 
@@ -102,5 +137,6 @@ describe("normalizeParams", () => {
     expect(normalizeParams(null)).toEqual(DEFAULT_PARAMS);
     expect(normalizeParams({ ventanaDias: 0, ratioMin: -3 })).toEqual(DEFAULT_PARAMS);
     expect(normalizeParams({ coberturaMax: 45 }).coberturaMax).toBe(45);
+    expect(normalizeParams({ mesesBrasil: 2 }).mesesBrasil).toBe(2);
   });
 });

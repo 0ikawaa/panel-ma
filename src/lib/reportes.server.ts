@@ -26,6 +26,20 @@ function numOrNull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// Código base/padre de un SKU: "16000-BLA/MAR" → "16000".
+function baseCode(sku: string): string {
+  return sku.split(/[-\s/]/)[0].trim();
+}
+
+/** Conjunto de códigos padre que son de Brasil (el resto se asume China). */
+export async function getBrasilSet(): Promise<Set<string>> {
+  const rows = await prisma.productOrigin.findMany({
+    where: { origin: "brasil" },
+    select: { codigo: true },
+  });
+  return new Set(rows.map((r) => r.codigo));
+}
+
 /**
  * Consulta los datos en vivo (MUNDO SHOP + stock + en camino) y arma el reporte
  * completo de ventas aceleradas.
@@ -76,10 +90,11 @@ export async function computeVentasAceleradas(
     WHERE sku IS NOT NULL AND sku <> ''
     GROUP BY sku`;
 
-  const [ventasRows, stockRows, caminoRows] = await Promise.all([
+  const [ventasRows, stockRows, caminoRows, brasilSet] = await Promise.all([
     msQuery(sqlVentas),
     msQuery(sqlStock),
     msQuery(sqlEnCamino),
+    getBrasilSet(),
   ]);
 
   const stockMap = new Map<string, { stock: number | null; name: string | null }>();
@@ -102,6 +117,8 @@ export async function computeVentasAceleradas(
       unidadesBase: num(v.base),
       stock: st ? st.stock : null,
       enCamino: caminoMap.get(sku) ?? 0,
+      // Clasificación por código padre contra la lista de Brasil.
+      origen: brasilSet.has(baseCode(sku)) ? "brasil" : "china",
     });
   }
 

@@ -55,6 +55,10 @@ export default function ReporteVentasAceleradas() {
   const [enabled, setEnabled] = useState(true);
   const [p, setP] = useState<VentasAceleradasParams | null>(null);
 
+  // Lista de códigos padre de Brasil (para clasificar el origen).
+  const [brasilCount, setBrasilCount] = useState<number | null>(null);
+  const [brasilBusy, setBrasilBusy] = useState(false);
+
   // Carga inicial: última corrida persistida + config (rápido, sin API externa).
   const loadLatest = useCallback(async () => {
     setLoading(true);
@@ -84,9 +88,43 @@ export default function ReporteVentasAceleradas() {
     }
   }, []);
 
+  const loadBrasil = useCallback(async () => {
+    try {
+      const res = await fetch("/api/reportes/origen-brasil", { cache: "no-store" });
+      const j = await res.json();
+      if (res.ok) setBrasilCount(j.count ?? 0);
+    } catch {
+      /* no crítico */
+    }
+  }, []);
+
   useEffect(() => {
     loadLatest();
-  }, [loadLatest]);
+    loadBrasil();
+  }, [loadLatest, loadBrasil]);
+
+  // Sube un nuevo Excel con los códigos padre de Brasil y reemplaza la lista.
+  async function subirBrasil(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setBrasilBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/reportes/origen-brasil", { method: "POST", body: fd });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
+      setBrasilCount(j.count);
+      setNotice(`Lista de Brasil actualizada: ${j.count} códigos. Actualizá el reporte para reclasificar.`);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBrasilBusy(false);
+    }
+  }
 
   // Genera el reporte en vivo (no persiste, no envía).
   async function refresh() {
@@ -289,8 +327,34 @@ export default function ReporteVentasAceleradas() {
                 <NumField label="Aceleración mínima (×)" value={p.ratioMin} step={0.1} onChange={(v) => setParam("ratioMin", v)} />
                 <NumField label="Cobertura máx. (días)" value={p.coberturaMax} onChange={(v) => setParam("coberturaMax", v)} />
                 <NumField label="Mín. unidades vendidas" value={p.minUnidades} onChange={(v) => setParam("minUnidades", v)} />
-                <NumField label="Objetivo cobertura (días)" value={p.objetivoDias} onChange={(v) => setParam("objetivoDias", v)} />
               </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Cantidad a pedir (meses de cobertura por origen)</div>
+              <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+                <NumField label="Meses — China 🇨🇳" value={p.mesesChina} step={0.5} onChange={(v) => setParam("mesesChina", v)} />
+                <NumField label="Meses — Brasil 🇧🇷" value={p.mesesBrasil} step={0.5} onChange={(v) => setParam("mesesBrasil", v)} />
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Productos de Brasil (por código padre)</div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300">
+                  {brasilCount === null ? "…" : <><b className="text-white">{brasilCount}</b> códigos cargados</>}
+                </span>
+                <label className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3.5 py-2 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 ${brasilBusy ? "opacity-60" : ""}`}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                    <path d="M12 21V9m0 0 4 4m-4-4-4 4M4 3h16" />
+                  </svg>
+                  {brasilBusy ? "Subiendo…" : "Subir Excel de Brasil"}
+                  <input type="file" accept=".xlsx,.xls" className="hidden" onChange={subirBrasil} disabled={brasilBusy} />
+                </label>
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                Excel con una columna de códigos padre (con o sin variante). Reemplaza toda la lista; lo que no esté ahí se toma como China.
+              </p>
             </div>
 
             <div className="flex items-center justify-end gap-2">
@@ -331,6 +395,7 @@ export default function ReporteVentasAceleradas() {
                 <tr>
                   <th className="px-3 py-3 text-left font-semibold">Código</th>
                   <th className="px-3 py-3 text-left font-semibold">Título</th>
+                  <th className="px-3 py-3 text-center font-semibold">Origen</th>
                   <th className="px-3 py-3 text-right font-semibold">u/día ({ventanaDias}d)</th>
                   <th className="px-3 py-3 text-right font-semibold text-teal-300">Aceleración</th>
                   <th className="px-3 py-3 text-right font-semibold">Stock</th>
@@ -346,6 +411,7 @@ export default function ReporteVentasAceleradas() {
                     <td className="max-w-[260px] truncate px-3 py-2.5 text-zinc-300" title={r.titulo ?? ""}>
                       {r.titulo ?? <span className="text-zinc-600">—</span>}
                     </td>
+                    <td className="px-3 py-2.5 text-center"><Origen o={r.origen} /></td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-zinc-200">{fmtDec(r.velReciente, 1)}</td>
                     <td className="px-3 py-2.5 text-right"><Accel r={r} /></td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-zinc-300">
@@ -355,7 +421,7 @@ export default function ReporteVentasAceleradas() {
                       {r.enCamino > 0 ? fmtInt(r.enCamino) : "sin repo"}
                     </td>
                     <td className="px-3 py-2.5 text-right"><Cobertura dias={r.diasCobertura} /></td>
-                    <td className="px-3 py-2.5 text-right font-bold tabular-nums text-teal-300">{fmtInt(r.sugerido)}</td>
+                    <td className="px-3 py-2.5 text-right font-bold tabular-nums text-teal-300" title={`${r.mesesObjetivo} meses de cobertura`}>{fmtInt(r.sugerido)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -368,8 +434,9 @@ export default function ReporteVentasAceleradas() {
         Se marca un código cuando: vendió al menos <b>{config?.params.minUnidades ?? 5}</b> unidades en los últimos{" "}
         <b>{ventanaDias}</b> días, su velocidad actual es al menos <b>{fmtDec(config?.params.ratioMin ?? 1.5, 1)}×</b> la de su
         histórico previo, y con el stock + lo que viene en camino le quedan <b>≤ {config?.params.coberturaMax ?? 30}</b> días de
-        cobertura al ritmo actual. «Pedir» estima las unidades para llegar a {config?.params.objetivoDias ?? 45} días de cobertura.
-        Ventas = ML + Odoo (local, mayorista y otros), sin duplicar ML.
+        cobertura al ritmo actual. «Pedir» = unidades para cubrir <b>{fmtDec(config?.params.mesesChina ?? 4, 1)} meses</b> si es de
+        China 🇨🇳 o <b>{fmtDec(config?.params.mesesBrasil ?? 1, 1)} mes</b> si es de Brasil 🇧🇷, al ritmo actual. El stock negativo se
+        toma como 0. Ventas = ML + Odoo (local, mayorista y otros), sin duplicar ML.
       </p>
     </div>
   );
@@ -416,6 +483,13 @@ function Cobertura({ dias }: { dias: number | null }) {
   return <span className={`font-semibold tabular-nums ${tone}`}>{d} d</span>;
 }
 
+function Origen({ o }: { o: "china" | "brasil" }) {
+  if (o === "brasil") {
+    return <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs font-semibold text-emerald-300" title="Brasil (1 mes)">🇧🇷 BR</span>;
+  }
+  return <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-300" title="China (4 meses)">🇨🇳 CN</span>;
+}
+
 function MobileCard({ r }: { r: VentasAceleradasItem }) {
   return (
     <div className="card p-3">
@@ -424,6 +498,7 @@ function MobileCard({ r }: { r: VentasAceleradasItem }) {
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px]">
         <span className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-zinc-300">{r.sku}</span>
+        <Origen o={r.origen} />
         <span className="text-zinc-500">{fmtDec(r.velReciente, 1)} u/día</span>
         <Accel r={r} />
       </div>

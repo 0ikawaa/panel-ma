@@ -134,6 +134,15 @@ model ReportConfig {
   updatedAt  DateTime @updatedAt
 }
 
+/// Origen de un producto por código padre (base, sin variante). Se usa para
+/// decidir cuántos meses de cobertura pedir (China = 4, Brasil = 1). Solo se
+/// guardan los de Brasil; lo que no está listado se asume de China.
+model ProductOrigin {
+  codigo    String   @id // código padre / base, ej. "16000"
+  origin    String   @default("brasil") // por ahora siempre "brasil"
+  updatedAt DateTime @updatedAt
+}
+
 /// Una corrida de un reporte (manual o automática). Guarda el snapshot de los
 /// SKUs marcados para poder mostrarlo en la sección y saber qué se envió.
 model ReportRun {
