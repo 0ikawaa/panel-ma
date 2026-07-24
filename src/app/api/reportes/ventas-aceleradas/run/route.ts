@@ -3,6 +3,7 @@ import { runAndDeliverVentasAceleradas } from "@/lib/reportes.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // POST /api/reportes/ventas-aceleradas/run
 // Corre el reporte, lo persiste y lo envía por WhatsApp (disparo manual).

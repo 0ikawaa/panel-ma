@@ -4,6 +4,7 @@ import { computeVentasAceleradas, getVentasAceleradasConfig } from "@/lib/report
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 // GET /api/reportes/ventas-aceleradas/export -> descarga el reporte como Excel.
 // Recalcula en vivo con la config guardada para exportar los datos del momento.

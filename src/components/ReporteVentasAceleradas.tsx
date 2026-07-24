@@ -59,10 +59,9 @@ export default function ReporteVentasAceleradas() {
   const [brasilCount, setBrasilCount] = useState<number | null>(null);
   const [brasilBusy, setBrasilBusy] = useState(false);
 
-  // Carga inicial: última corrida persistida + config (rápido, sin API externa).
-  const loadLatest = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  // Carga la config guardada (número, umbrales, estado del último envío). NO pinta
+  // los ítems: esos se calculan siempre en vivo para no mostrar una foto vieja.
+  const loadConfig = useCallback(async () => {
     try {
       const res = await fetch("/api/reportes/ventas-aceleradas/latest", { cache: "no-store" });
       const j = await res.json();
@@ -72,19 +71,8 @@ export default function ReporteVentasAceleradas() {
       setNumero(cfg.whatsappTo ?? "");
       setEnabled(cfg.enabled);
       setP(cfg.params);
-      if (j.run) {
-        setItems((j.run.items as VentasAceleradasItem[]) ?? []);
-        setSummary(j.run.summary as Summary);
-        setLastRunAt(j.run.createdAt);
-        setLastTrigger(j.run.trigger);
-        setWaStatus(j.run.whatsappStatus);
-        setWaTo(j.run.whatsappTo);
-        setLive(false);
-      }
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -98,10 +86,42 @@ export default function ReporteVentasAceleradas() {
     }
   }, []);
 
+  // Genera el reporte en vivo (recalcula contra la API; no persiste ni envía).
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/reportes/ventas-aceleradas", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(60000),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
+      setItems(j.report.items);
+      setSummary(j.report.summary);
+      setConfig(j.config);
+      setLastRunAt(j.report.generadoEn);
+      setLastTrigger("en vivo");
+      setWaStatus(null);
+      setWaTo(null);
+      setLive(true);
+    } catch (e) {
+      const err = e as Error;
+      setError(err.name === "TimeoutError" ? "La consulta tardó demasiado (timeout)." : err.message);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // Al abrir: carga config + lista de Brasil y calcula el reporte en vivo.
   useEffect(() => {
-    loadLatest();
-    loadBrasil();
-  }, [loadLatest, loadBrasil]);
+    (async () => {
+      await Promise.all([loadConfig(), loadBrasil()]);
+      await refresh();
+      setLoading(false);
+    })();
+  }, [loadConfig, loadBrasil, refresh]);
 
   // Sube un nuevo Excel con los códigos padre de Brasil y reemplaza la lista.
   async function subirBrasil(e: React.ChangeEvent<HTMLInputElement>) {
@@ -123,32 +143,6 @@ export default function ReporteVentasAceleradas() {
       setError((err as Error).message);
     } finally {
       setBrasilBusy(false);
-    }
-  }
-
-  // Genera el reporte en vivo (no persiste, no envía).
-  async function refresh() {
-    setRefreshing(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await fetch("/api/reportes/ventas-aceleradas", {
-        cache: "no-store",
-        signal: AbortSignal.timeout(60000),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
-      setItems(j.report.items);
-      setSummary(j.report.summary);
-      setConfig(j.config);
-      setLastRunAt(j.report.generadoEn);
-      setLastTrigger("en vivo");
-      setLive(true);
-    } catch (e) {
-      const err = e as Error;
-      setError(err.name === "TimeoutError" ? "La consulta tardó demasiado (timeout)." : err.message);
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -210,7 +204,8 @@ export default function ReporteVentasAceleradas() {
 
   const ventanaDias = config?.params.ventanaDias ?? 30;
 
-  const empty = !loading && items.length === 0;
+  const busy = loading || refreshing;
+  const empty = !busy && items.length === 0;
   const sortedInfo = useMemo(() => (live ? "Generado en vivo" : lastTrigger === "cron" ? "Envío automático" : lastTrigger === "manual" ? "Corrida manual" : lastTrigger ?? ""), [live, lastTrigger]);
 
   return (
@@ -358,7 +353,7 @@ export default function ReporteVentasAceleradas() {
             </div>
 
             <div className="flex items-center justify-end gap-2">
-              <button onClick={loadLatest} className="rounded-lg px-3 py-2 text-sm text-zinc-400 transition hover:text-white">Deshacer</button>
+              <button onClick={loadConfig} className="rounded-lg px-3 py-2 text-sm text-zinc-400 transition hover:text-white">Deshacer</button>
               <button
                 onClick={guardarConfig}
                 disabled={savingCfg}
@@ -371,7 +366,12 @@ export default function ReporteVentasAceleradas() {
         )}
       </div>
 
-      {empty ? (
+      {busy && items.length === 0 ? (
+        <div className="card px-4 py-12 text-center text-sm text-zinc-400">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="mx-auto mb-2 h-5 w-5 animate-spin text-zinc-500"><path d="M21 12a9 9 0 1 1-2.64-6.36" strokeLinecap="round" /></svg>
+          Calculando el reporte con los datos de hoy…
+        </div>
+      ) : empty ? (
         <div className="card px-4 py-12 text-center">
           <p className="text-sm text-zinc-300">✅ No hay SKUs en riesgo de quiebre.</p>
           <p className="mt-1 text-xs text-zinc-500">
