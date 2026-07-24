@@ -11,6 +11,13 @@ const REPORTES = [
     tag: "Diario · WhatsApp",
     activo: true,
   },
+  {
+    href: "/reportes/sin-rotacion",
+    titulo: "Publicaciones sin rotación",
+    desc: "Productos (por código padre) que se venden menos que el mes pasado y que el mismo período del año pasado. Detalla la caída y el motivo probable (agotado, viene en camino, o con stock que no rota).",
+    tag: "En vivo",
+    activo: true,
+  },
 ];
 
 export default function ReportesPage() {
