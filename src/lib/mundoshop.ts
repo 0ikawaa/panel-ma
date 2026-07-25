@@ -180,6 +180,124 @@ export type MlItem = {
   tags: string[];
 };
 
+// Detalle enriquecido de una publicación (endpoint live /ml-item/:id). Superset
+// de MlItem: agrega los campos que sólo devuelve el detalle (fotos, video, envío,
+// catálogo, visitas, atributos…) y el array `issues` que la propia API pre-calcula.
+export type MlItemDetail = MlItem & {
+  original_price: number | null; // precio de lista si hay promo/descuento
+  currency: string | null;
+  condition: string | null; // new | used
+  catalog_product_id: string | null; // ficha de catálogo con la que se podría competir
+  visits_30d: number | null; // visitas de los últimos 30 días (para priorizar)
+  photos_count: number | null;
+  photos_min_resolution: number | null; // lado más corto de la foto más chica (px)
+  has_video: boolean;
+  free_shipping: boolean;
+  warranty: string | null;
+  attributes_count: number | null;
+  description_length: number | null;
+  date_created: string | null;
+  issues: string[]; // diagnóstico ya armado por la API (texto libre, informativo)
+};
+
+/** Normaliza el JSON crudo del detalle a MlItemDetail (rellena nulos y arrays). */
+function toItemDetail(raw: Record<string, unknown>): MlItemDetail {
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+  return {
+    id: String(raw.id),
+    title: String(raw.title ?? ""),
+    status: String(raw.status ?? ""),
+    sub_status: Array.isArray(raw.sub_status) ? (raw.sub_status as string[]) : [],
+    health: num(raw.health),
+    price: num(raw.price),
+    available_quantity: num(raw.available_quantity),
+    sold_quantity: num(raw.sold_quantity),
+    listing_type: str(raw.listing_type),
+    catalog_listing: typeof raw.catalog_listing === "boolean" ? raw.catalog_listing : null,
+    permalink: str(raw.permalink),
+    thumbnail: httpsUrl(str(raw.thumbnail)),
+    seller_sku: str(raw.seller_sku),
+    tags: Array.isArray(raw.tags) ? (raw.tags as string[]) : [],
+    original_price: num(raw.original_price),
+    currency: str(raw.currency),
+    condition: str(raw.condition),
+    catalog_product_id: str(raw.catalog_product_id),
+    visits_30d: num(raw.visits_30d),
+    photos_count: num(raw.photos_count),
+    photos_min_resolution: num(raw.photos_min_resolution),
+    has_video: raw.has_video === true,
+    free_shipping: raw.free_shipping === true,
+    warranty: str(raw.warranty),
+    attributes_count: num(raw.attributes_count),
+    description_length: num(raw.description_length),
+    date_created: str(raw.date_created),
+    issues: Array.isArray(raw.issues) ? (raw.issues as string[]) : [],
+  };
+}
+
+/** Detalle live de una publicación por id (/ml-item/:id). */
+export async function msGetItemDetail(id: string, timeoutMs = 20000): Promise<MlItemDetail> {
+  const raw = await msGet<Record<string, unknown>>(`ml-item/${id}`, timeoutMs);
+  return toItemDetail(raw);
+}
+
+/** Corre `fn` sobre `items` con un límite de concurrencia (pool de workers). */
+async function mapPool<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let idx = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const i = idx++;
+      if (i >= items.length) break;
+      out[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/**
+ * Trae TODAS las publicaciones activas con su detalle enriquecido: primero
+ * enumera los ids con /ml-items y luego pide /ml-item/:id de cada uno en paralelo
+ * (pool acotado). Si el detalle de alguna falla, se degrada al item de la lista
+ * (con los campos de detalle en null) para no romper el reporte. `fallidos` cuenta
+ * cuántos detalles no se pudieron traer.
+ */
+export async function msListActiveDetailed(
+  opts: { timeoutMs?: number; concurrency?: number } = {},
+): Promise<{ items: MlItemDetail[]; total: number; fallidos: number }> {
+  const timeoutMs = opts.timeoutMs ?? 20000;
+  const { items: base, total } = await msListAllItems("active", { timeoutMs });
+  const details = await mapPool(base, opts.concurrency ?? 24, (it) =>
+    msGetItemDetail(it.id, timeoutMs).catch(() => null),
+  );
+  let fallidos = 0;
+  const items: MlItemDetail[] = base.map((b, i) => {
+    const d = details[i];
+    if (d) return d;
+    fallidos += 1;
+    return {
+      ...b,
+      original_price: null,
+      currency: null,
+      condition: null,
+      catalog_product_id: null,
+      visits_30d: null,
+      photos_count: null,
+      photos_min_resolution: null,
+      has_video: false,
+      free_shipping: false,
+      warranty: null,
+      attributes_count: null,
+      description_length: null,
+      date_created: null,
+      issues: [],
+    };
+  });
+  return { items, total, fallidos };
+}
+
 type MlItemsPage = { paging?: { total?: number }; items?: MlItem[] };
 
 /**

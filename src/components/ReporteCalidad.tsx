@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fmtInt, fmtDateTime } from "@/lib/format";
 import { calidadEstado, type CalidadItem, type CalidadReport, type Severidad } from "@/lib/calidad";
 
-type Filtro = "todas" | "infracciones" | "sin-foto";
+type Filtro = "todas" | "calidad" | "infracciones" | "fotos" | "envio" | "catalogo" | "video" | "fidelidad";
 
 const sevTone: Record<Severidad, string> = {
   alta: "bg-red-500/15 text-red-300",
@@ -13,18 +13,31 @@ const sevTone: Record<Severidad, string> = {
 };
 const sevLabel: Record<Severidad, string> = { alta: "Alta", media: "Media", baja: "Baja" };
 
+function matchFiltro(it: CalidadItem, f: Filtro): boolean {
+  switch (f) {
+    case "calidad": return it.objetivos.some((o) => o.categoria === "calidad");
+    case "infracciones": return it.infracciones;
+    case "fotos": return it.fotosBajaCalidad;
+    case "envio": return it.sinEnvioGratis;
+    case "catalogo": return it.fueraCatalogo;
+    case "video": return it.sinVideo;
+    case "fidelidad": return it.sinFidelidad;
+    default: return true;
+  }
+}
+
 export default function ReporteCalidad() {
   const [report, setReport] = useState<CalidadReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<Filtro>("todas");
+  const [filtro, setFiltro] = useState<Filtro>("calidad");
   const [abierta, setAbierta] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/reportes/calidad", { cache: "no-store", signal: AbortSignal.timeout(60000) });
+      const res = await fetch("/api/reportes/calidad", { cache: "no-store", signal: AbortSignal.timeout(115000) });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
       setReport(j.report);
@@ -43,11 +56,10 @@ export default function ReporteCalidad() {
   }, [load]);
 
   const s = report?.summary;
-  const items = (report?.items ?? []).filter((it) => {
-    if (filtro === "infracciones") return it.infracciones;
-    if (filtro === "sin-foto") return it.objetivos.some((o) => o.code === "foto_principal");
-    return true;
-  });
+  const items = (report?.items ?? []).filter((it) => matchFiltro(it, filtro));
+
+  // Alterna un filtro: si ya está activo vuelve a "todas".
+  const toggle = (f: Filtro) => setFiltro((cur) => (cur === f ? "todas" : f));
 
   return (
     <div className="space-y-4">
@@ -61,6 +73,8 @@ export default function ReporteCalidad() {
               <span className="font-semibold text-zinc-200">
                 {s.healthPromedio === null ? "—" : `${Math.round(s.healthPromedio * 100)}%`}
               </span>
+              {" · "}
+              <span className="font-semibold text-amber-300">{fmtInt(s.visitasEnRiesgo)}</span> visitas/30d en riesgo
               {report ? ` · ${fmtDateTime(report.generadoEn)}` : ""}
             </>
           ) : (
@@ -88,14 +102,30 @@ export default function ReporteCalidad() {
       </div>
 
       {error && <div className="rounded-xl border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">{error}</div>}
+      {report?.fallidos ? (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          No se pudo traer el detalle de {report.fallidos} publicación{report.fallidos === 1 ? "" : "es"} (se evaluaron con datos parciales).
+        </div>
+      ) : null}
 
       {/* KPIs (clic para filtrar) */}
       {s && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Kpi label="A mejorar" value={fmtInt(s.aMejorar)} accent active={filtro === "todas"} onClick={() => setFiltro("todas")} />
+          <Kpi label="A mejorar (calidad)" value={fmtInt(s.aMejorar)} accent active={filtro === "calidad"} onClick={() => setFiltro("calidad")} />
           <Kpi label="Al máximo" value={fmtInt(s.maxima)} />
-          <Kpi label="Con infracciones" value={fmtInt(s.conInfracciones)} active={filtro === "infracciones"} onClick={() => setFiltro(filtro === "infracciones" ? "todas" : "infracciones")} />
-          <Kpi label="Sin foto principal buena" value={fmtInt(s.sinFotoPrincipal)} active={filtro === "sin-foto"} onClick={() => setFiltro(filtro === "sin-foto" ? "todas" : "sin-foto")} />
+          <Kpi label="Con infracciones" value={fmtInt(s.conInfracciones)} tone="red" active={filtro === "infracciones"} onClick={() => toggle("infracciones")} />
+          <Kpi label="Fotos baja resolución" value={fmtInt(s.fotosBajaCalidad)} active={filtro === "fotos"} onClick={() => toggle("fotos")} />
+          <Kpi label="Sin envío gratis" value={fmtInt(s.sinEnvioGratis)} active={filtro === "envio"} onClick={() => toggle("envio")} />
+          <Kpi label="Fuera de catálogo" value={fmtInt(s.fueraCatalogo)} active={filtro === "catalogo"} onClick={() => toggle("catalogo")} />
+          <Kpi label="Sin video" value={fmtInt(s.sinVideo)} active={filtro === "video"} onClick={() => toggle("video")} />
+          <Kpi label="Sin fidelidad" value={fmtInt(s.sinFidelidad)} active={filtro === "fidelidad"} onClick={() => toggle("fidelidad")} />
+        </div>
+      )}
+
+      {s && filtro !== "todas" && (
+        <div className="flex items-center gap-2 px-1 text-xs text-zinc-500">
+          <span>Mostrando {fmtInt(items.length)} publicación{items.length === 1 ? "" : "es"} filtradas.</span>
+          <button onClick={() => setFiltro("todas")} className="font-semibold text-teal-300 hover:text-teal-200">Ver todas</button>
         </div>
       )}
 
@@ -107,7 +137,7 @@ export default function ReporteCalidad() {
       ) : items.length === 0 ? (
         <div className="card px-4 py-12 text-center">
           <p className="text-sm text-zinc-300">✅ No hay publicaciones para mejorar con este filtro.</p>
-          <p className="mt-1 text-xs text-zinc-500">Todas las activas están en su calidad máxima.</p>
+          <p className="mt-1 text-xs text-zinc-500">Probá con otro filtro o mirá todas.</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -118,16 +148,17 @@ export default function ReporteCalidad() {
       )}
 
       <p className="px-1 text-xs leading-relaxed text-zinc-500">
-        La <b className="text-zinc-400">calidad</b> es el <i>health</i> que calcula MercadoLibre (0–100%). Se listan las
-        publicaciones activas que no están al máximo, con los objetivos que ML permite accionar: foto principal, resto de fotos,
-        ficha técnica/atributos, carrito, descuentos de fidelidad, infracciones y visibilidad. El principal motor del puntaje suele
-        ser la <b className="text-zinc-400">ficha técnica</b> completa. Datos en vivo de MUNDO SHOP.
+        La <b className="text-zinc-400">calidad</b> es el <i>health</i> que calcula MercadoLibre (0–100%). Se separan los objetivos en{" "}
+        <b className="text-zinc-400">Calidad</b> (foto principal, fotos, ficha técnica, carrito, infracciones y visibilidad — mueven el
+        puntaje) y <b className="text-zinc-400">Oportunidades</b> (envío gratis, catálogo, video y fidelidad — mejoran conversión y
+        posicionamiento). El orden prioriza lo que tiene más <b className="text-zinc-400">visitas</b> en los últimos 30 días. Datos en vivo de MUNDO SHOP.
       </p>
     </div>
   );
 }
 
-function Kpi({ label, value, accent, active, onClick }: { label: string; value: string; accent?: boolean; active?: boolean; onClick?: () => void }) {
+function Kpi({ label, value, accent, tone, active, onClick }: { label: string; value: string; accent?: boolean; tone?: "red"; active?: boolean; onClick?: () => void }) {
+  const valTone = accent ? "text-teal-300" : tone === "red" ? "text-red-300" : "text-white";
   return (
     <button
       type="button"
@@ -136,13 +167,19 @@ function Kpi({ label, value, accent, active, onClick }: { label: string; value: 
       className={`card p-3 text-left transition sm:p-4 ${onClick ? "cursor-pointer hover:bg-white/[0.04]" : "cursor-default"} ${active && onClick ? "ring-2 ring-teal-500/40" : accent ? "ring-1 ring-teal-500/25" : ""}`}
     >
       <div className="text-[11px] text-zinc-500 sm:text-xs">{label}</div>
-      <div className={`text-xl font-bold tabular-nums sm:text-2xl ${accent ? "text-teal-300" : "text-white"}`}>{value}</div>
+      <div className={`text-xl font-bold tabular-nums sm:text-2xl ${valTone}`}>{value}</div>
     </button>
   );
 }
 
+function Badge({ children, tone }: { children: React.ReactNode; tone: string }) {
+  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${tone}`}>{children}</span>;
+}
+
 function Fila({ it, abierta, onToggle }: { it: CalidadItem; abierta: boolean; onToggle: () => void }) {
   const est = calidadEstado(it.calidadPct);
+  const calidadObjs = it.objetivos.filter((o) => o.categoria === "calidad");
+  const oportObjs = it.objetivos.filter((o) => o.categoria === "oportunidad");
   return (
     <div className="card overflow-hidden">
       <button onClick={onToggle} className="flex w-full items-center gap-3 p-3 text-left transition hover:bg-white/[0.03]">
@@ -156,9 +193,14 @@ function Fila({ it, abierta, onToggle }: { it: CalidadItem; abierta: boolean; on
           <div className="line-clamp-2 text-sm font-medium leading-snug text-zinc-100">{it.titulo}</div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
             <span className="font-mono text-zinc-500">{it.sku ?? it.id}</span>
-            {it.infracciones && <span className="rounded bg-red-500/15 px-1.5 py-0.5 font-semibold text-red-300">Infracción</span>}
-            {it.visibilidadReducida && <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-semibold text-amber-300">Visibilidad ↓</span>}
-            <span className="text-zinc-500">{it.objetivos.length} objetivo{it.objetivos.length === 1 ? "" : "s"}</span>
+            {it.infracciones && <Badge tone="bg-red-500/15 text-red-300">Infracción</Badge>}
+            {it.visibilidadReducida && <Badge tone="bg-amber-500/15 text-amber-300">Visibilidad ↓</Badge>}
+            {it.fotosBajaCalidad && <Badge tone="bg-amber-500/10 text-amber-200/90">Fotos ↓</Badge>}
+            {it.sinEnvioGratis && <Badge tone="bg-sky-500/10 text-sky-200/90">Sin envío gratis</Badge>}
+            {it.fueraCatalogo && <Badge tone="bg-violet-500/10 text-violet-200/90">Fuera de catálogo</Badge>}
+            {it.visitas30d !== null && it.visitas30d > 0 && (
+              <span className="text-zinc-500">· {fmtInt(it.visitas30d)} visitas/30d</span>
+            )}
           </div>
         </div>
         <div className="shrink-0 text-right">
@@ -172,22 +214,19 @@ function Fila({ it, abierta, onToggle }: { it: CalidadItem; abierta: boolean; on
 
       {abierta && (
         <div className="border-t border-white/10 p-3 sm:p-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Objetivos para llevar la calidad al máximo</div>
-          <ul className="space-y-1.5">
-            {it.objetivos.map((o) => (
-              <li key={o.code} className="flex items-start gap-2 text-sm text-zinc-200">
-                <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-white/20" />
-                <span className="flex-1">{o.label}</span>
-                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${sevTone[o.severidad]}`}>{sevLabel[o.severidad]}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
+          {calidadObjs.length > 0 && <ObjGrupo titulo="Calidad — suben el puntaje de ML" objetivos={calidadObjs} />}
+          {oportObjs.length > 0 && <ObjGrupo titulo="Oportunidades — más ventas y visibilidad" objetivos={oportObjs} />}
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
             {it.permalink && (
               <a href={it.permalink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-teal-300 hover:text-teal-200">
                 Ver publicación
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5"><path d="M7 17 17 7M7 7h10v10" /></svg>
               </a>
+            )}
+            {it.visitas30d !== null && <span>Visitas 30d: {fmtInt(it.visitas30d)}</span>}
+            {it.fotosCount !== null && (
+              <span>Fotos: {fmtInt(it.fotosCount)}{it.fotosMinRes !== null ? ` · mín. ${it.fotosMinRes}px` : ""}</span>
             )}
             {it.price !== null && <span>Precio: $ {it.price.toLocaleString("es-UY")}</span>}
             {it.disponibles !== null && <span>Stock ML: {fmtInt(it.disponibles)}</span>}
@@ -195,6 +234,23 @@ function Fila({ it, abierta, onToggle }: { it: CalidadItem; abierta: boolean; on
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ObjGrupo({ titulo, objetivos }: { titulo: string; objetivos: CalidadItem["objetivos"] }) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <div className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-zinc-500">{titulo}</div>
+      <ul className="space-y-1.5">
+        {objetivos.map((o) => (
+          <li key={o.code} className="flex items-start gap-2 text-sm text-zinc-200">
+            <span className="mt-0.5 h-4 w-4 shrink-0 rounded-full border border-white/20" />
+            <span className="flex-1">{o.label}</span>
+            <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${sevTone[o.severidad]}`}>{sevLabel[o.severidad]}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

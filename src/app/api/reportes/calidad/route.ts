@@ -3,7 +3,7 @@ import { computeCalidad } from "@/lib/calidad.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 // GET /api/reportes/calidad → evalúa la calidad de las publicaciones activas en vivo.
 export async function GET() {
