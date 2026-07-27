@@ -168,6 +168,16 @@ function obtenerOCrearHoja_(ss, nombre) {
   return ss.getSheetByName(nombre) || ss.insertSheet(nombre);
 }
 
+/**
+ * Deja la hoja en blanco de verdad. `clear()` borra contenido y formato pero NO
+ * las celdas combinadas, y volver a combinar encima de un merge viejo más ancho
+ * falla. Pasa cada vez que cambia la cantidad de columnas de una pestaña.
+ */
+function limpiarHoja_(hoja) {
+  hoja.clear();
+  hoja.getRange(1, 1, hoja.getMaxRows(), hoja.getMaxColumns()).breakApart();
+}
+
 /** Deja la hoja sin sobrantes de una corrida anterior con más filas o columnas. */
 function limpiarSobrantes_(hoja, filasUsadas, columnasUsadas) {
   var maxF = hoja.getMaxRows();
@@ -180,11 +190,13 @@ function limpiarSobrantes_(hoja, filasUsadas, columnasUsadas) {
 
 function escribirResumen_(ss, data) {
   var hoja = obtenerOCrearHoja_(ss, PESTANA_RESUMEN);
-  hoja.clear();
+  limpiarHoja_(hoja);
   hoja.setHiddenGridlines(true);
 
-  var COLS = 5;
-  var anchos = [260, 150, 190, 210, 110];
+  // Sin columna de ítems: el Resumen contesta qué viene y cuándo llega, y la
+  // cantidad de ítems de cada embarque está en su propia pestaña.
+  var COLS = 4;
+  var anchos = [280, 160, 200, 220];
   for (var a = 0; a < anchos.length; a++) hoja.setColumnWidth(a + 1, anchos[a]);
 
   // Encabezado de la planilla.
@@ -206,7 +218,7 @@ function escribirResumen_(ss, data) {
   hoja.setRowHeight(3, 10);
 
   var filaEnc = 4;
-  var titulos = ['Embarque', 'Estado', 'Fecha de llegada', 'Cuánto falta', 'Ítems'];
+  var titulos = ['Embarque', 'Estado', 'Fecha de llegada', 'Cuánto falta'];
   hoja.getRange(filaEnc, 1, 1, COLS).setValues([titulos])
     .setFontWeight('bold').setFontColor(AZUL).setBackground(AZUL_CLARO)
     .setVerticalAlignment('middle');
@@ -221,8 +233,7 @@ function escribirResumen_(ss, data) {
         e.nombre,
         e.estadoLabel,
         e.arribado ? formatearFecha_(e.receivedAt) : formatearFecha_(e.eta),
-        textoLlegada_(e),
-        e.totales.items
+        textoLlegada_(e)
       ]);
     }
 
@@ -232,7 +243,6 @@ function escribirResumen_(ss, data) {
     hoja.setRowHeights(inicio, filas.length, 30);
 
     hoja.getRange(inicio, 1, filas.length, 1).setFontWeight('bold');
-    hoja.getRange(inicio, 5, filas.length, 1).setHorizontalAlignment('center');
 
     // Bandas y semáforo de llegada, fila por fila.
     for (var j = 0; j < embarques.length; j++) {
@@ -270,7 +280,7 @@ function escribirEmbarque_(ss, emb) {
     renombrarSiPuede_(ss, hoja, emb.pestana);
   }
 
-  hoja.clear();
+  limpiarHoja_(hoja);
   hoja.setHiddenGridlines(true);
   var COLS = COLUMNAS.length;
   for (var w = 0; w < COLS; w++) hoja.setColumnWidth(w + 1, COLUMNAS[w].ancho);
