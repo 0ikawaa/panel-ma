@@ -114,8 +114,14 @@ así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para
 ## 📊 Embarques en Google Sheets
 
 La planilla se mantiene sola: una pestaña **Resumen** con todos los embarques y una pestaña por embarque
-con su detalle de ítems y las fotos. Cuando un embarque se marca como **arribado** (entra a depósito),
-su pestaña se oculta sola; queda accesible desde *Ver > Hojas ocultas*.
+con su detalle (foto, código, cantidad y observaciones). Cuando un embarque se marca como **arribado**
+(entra a depósito), su pestaña se oculta sola; queda accesible desde *Ver > Hojas ocultas*.
+
+> **El feed no expone datos comerciales.** Ni precios FOB, ni montos, ni CBM, ni flete, ni costo
+> nacionalizado: la route ni siquiera los trae de la base. La planilla se comparte con gente que sólo
+> necesita saber qué viene y cuándo llega, y quien tenga permiso de edición sobre la hoja puede leer el
+> token en las propiedades del Apps Script y pegarle al endpoint a mano. Si alguna vez hace falta un feed
+> con números, va como endpoint aparte y con su propio token.
 
 - **Feed:** `GET /api/sheets/embarques`, valida `Authorization: Bearer $SHEETS_TOKEN`.
 - **Script:** `docs/embarques-google-sheet.gs` — se pega en *Extensiones > Apps Script* de la planilla.

@@ -2,10 +2,13 @@
  * Sincroniza la planilla con los embarques del panel.
  *
  * Arma una pestaña "Resumen" con todos los embarques y una pestaña por
- * embarque con su detalle de ítems (incluida la foto). Cuando un embarque se
- * marca como arribado en la plataforma (entra a depósito), su pestaña se
- * oculta automáticamente: no se borra, así queda el histórico disponible
- * desde Ver > Hojas ocultas.
+ * embarque con su detalle: foto, código, cantidad y observaciones. Cuando un
+ * embarque se marca como arribado en la plataforma (entra a depósito), su
+ * pestaña se oculta automáticamente: no se borra, así queda el histórico
+ * disponible desde Ver > Hojas ocultas.
+ *
+ * La planilla es de sólo lectura en la práctica: cada actualización reescribe
+ * las pestañas de embarque, así que no conviene anotar nada dentro de ellas.
  *
  * INSTALACIÓN
  *   1. En la planilla: Extensiones > Apps Script, y pegar este archivo.
@@ -21,20 +24,30 @@
 
 var PESTANA_RESUMEN = 'Resumen';
 var META_KEY = 'embarqueId';
-var ALTO_FILA_FOTO = 66;
+
+// Paleta. Un solo azul de marca, grises para el cuerpo y tres colores de
+// semáforo reservados exclusivamente para la fecha de llegada, que es el dato
+// que la planilla tiene que gritar.
+var AZUL = '#12395c';
+var AZUL_CLARO = '#e8eef4';
+var GRIS_BORDE = '#d5dce3';
+var GRIS_TEXTO = '#5f6b76';
+var BANDA = '#f7f9fb';
+var BLANCO = '#ffffff';
+
+var URGENTE_BG = '#fde8e6';  var URGENTE_FG = '#a4271c'; // llega en <= 3 días o se pasó
+var PRONTO_BG  = '#fef3d7';  var PRONTO_FG  = '#8a5300'; // llega en <= 14 días
+var LEJOS_BG   = '#e3f4e9';  var LEJOS_FG   = '#1c6b3f'; // más lejos
+var NEUTRO_BG  = '#eef1f4';  var NEUTRO_FG  = GRIS_TEXTO; // sin ETA / recibido
+
+var ALTO_FILA_ITEM = 92;
+var LADO_FOTO = 82;
 
 var COLUMNAS = [
-  { titulo: 'Foto', ancho: 80, formato: null },
-  { titulo: '#', ancho: 40, formato: '0' },
-  { titulo: 'Código', ancho: 120, formato: null },
-  { titulo: 'Unidades', ancho: 90, formato: '#,##0' },
-  { titulo: 'Unidad', ancho: 70, formato: null },
-  { titulo: 'Precio FOB (USD)', ancho: 130, formato: '#,##0.0000' },
-  { titulo: 'CBM x unidad', ancho: 110, formato: '#,##0.000000' },
-  { titulo: 'CBM total', ancho: 100, formato: '#,##0.0000' },
-  { titulo: 'Precio lote (USD)', ancho: 130, formato: '#,##0.00' },
-  { titulo: 'Costo final /u (USD, IVA inc.)', ancho: 200, formato: '#,##0.0000' },
-  { titulo: 'Observaciones', ancho: 300, formato: null }
+  { titulo: 'Foto', ancho: 105 },
+  { titulo: 'Código', ancho: 165 },
+  { titulo: 'Cantidad', ancho: 105 },
+  { titulo: 'Observaciones', ancho: 560 }
 ];
 
 // ---------------------------------------------------------------- menú
@@ -92,12 +105,44 @@ function traerDatos_() {
   return JSON.parse(res.getContentText());
 }
 
-// ---------------------------------------------------------------- helpers
+// ---------------------------------------------------------------- fechas
 
-/** Fecha ISO -> Date que Sheets entienda, o '' si no hay. */
 function aFecha_(iso) {
   return iso ? new Date(iso) : '';
 }
+
+function formatearFecha_(iso) {
+  if (!iso) return '';
+  return Utilities.formatDate(new Date(iso), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+}
+
+/** 12345 -> "12.345". Utilities.formatString no maneja separador de miles. */
+function miles_(n) {
+  return String(n == null ? 0 : n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/** Texto de la cuenta regresiva: lo primero que se lee de un embarque. */
+function textoLlegada_(emb) {
+  if (emb.arribado) return 'Recibido ' + formatearFecha_(emb.receivedAt);
+  var d = emb.diasParaLlegar;
+  if (d === null) return 'Sin fecha estimada';
+  if (d < 0) return 'Demorado · ' + Math.abs(d) + (Math.abs(d) === 1 ? ' día' : ' días');
+  if (d === 0) return '¡Llega hoy!';
+  if (d === 1) return 'Llega mañana';
+  return 'Faltan ' + d + ' días';
+}
+
+/** Colores del semáforo según qué tan cerca está la llegada. */
+function coloresLlegada_(emb) {
+  if (emb.arribado) return { bg: NEUTRO_BG, fg: NEUTRO_FG };
+  var d = emb.diasParaLlegar;
+  if (d === null) return { bg: NEUTRO_BG, fg: NEUTRO_FG };
+  if (d <= 3) return { bg: URGENTE_BG, fg: URGENTE_FG };
+  if (d <= 14) return { bg: PRONTO_BG, fg: PRONTO_FG };
+  return { bg: LEJOS_BG, fg: LEJOS_FG };
+}
+
+// ---------------------------------------------------------------- pestañas
 
 /**
  * Ubica la pestaña de un embarque por su metadata, que sobrevive a que el
@@ -112,7 +157,6 @@ function buscarPestana_(ss, id) {
   return null;
 }
 
-/** Renombra si hace falta y si el nombre está libre. */
 function renombrarSiPuede_(ss, hoja, nombre) {
   if (hoja.getName() === nombre) return;
   var otra = ss.getSheetByName(nombre);
@@ -124,60 +168,93 @@ function obtenerOCrearHoja_(ss, nombre) {
   return ss.getSheetByName(nombre) || ss.insertSheet(nombre);
 }
 
+/** Deja la hoja sin sobrantes de una corrida anterior con más filas o columnas. */
+function limpiarSobrantes_(hoja, filasUsadas, columnasUsadas) {
+  var maxF = hoja.getMaxRows();
+  var maxC = hoja.getMaxColumns();
+  if (maxF > filasUsadas + 2) hoja.deleteRows(filasUsadas + 3, maxF - filasUsadas - 2);
+  if (maxC > columnasUsadas) hoja.deleteColumns(columnasUsadas + 1, maxC - columnasUsadas);
+}
+
 // ---------------------------------------------------------------- resumen
 
 function escribirResumen_(ss, data) {
   var hoja = obtenerOCrearHoja_(ss, PESTANA_RESUMEN);
   hoja.clear();
+  hoja.setHiddenGridlines(true);
 
-  var encabezado = [
-    'Embarque', 'Estado', 'Proveedor', 'Origen', 'ETA', 'Recibido',
-    'Ítems', 'Unidades', 'CBM', 'Monto (USD)', 'Flete (USD)', 'Notas'
-  ];
+  var COLS = 5;
+  var anchos = [260, 150, 190, 210, 110];
+  for (var a = 0; a < anchos.length; a++) hoja.setColumnWidth(a + 1, anchos[a]);
 
-  var filas = data.embarques.map(function (e) {
-    return [
-      e.nombre,
-      e.estadoLabel,
-      e.proveedor,
-      e.origen,
-      aFecha_(e.eta),
-      aFecha_(e.receivedAt),
-      e.totales.items,
-      e.totales.unidades,
-      e.totales.cbm,
-      e.totales.monto,
-      e.flete === null ? '' : e.flete,
-      e.notas
-    ];
-  });
+  // Encabezado de la planilla.
+  hoja.getRange(1, 1, 1, COLS).merge()
+    .setValue('Embarques en curso')
+    .setFontSize(18).setFontWeight('bold')
+    .setFontColor(BLANCO).setBackground(AZUL)
+    .setVerticalAlignment('middle').setHorizontalAlignment('left');
+  hoja.setRowHeight(1, 46);
 
-  hoja.getRange(1, 1, 1, encabezado.length).setValues([encabezado])
-    .setFontWeight('bold').setBackground('#f1f3f4');
-  if (filas.length) {
-    hoja.getRange(2, 1, filas.length, encabezado.length).setValues(filas);
-    hoja.getRange(2, 5, filas.length, 2).setNumberFormat('dd/mm/yyyy');
-    hoja.getRange(2, 7, filas.length, 2).setNumberFormat('#,##0');
-    hoja.getRange(2, 9, filas.length, 1).setNumberFormat('#,##0.0000');
-    hoja.getRange(2, 10, filas.length, 2).setNumberFormat('#,##0.00');
+  hoja.getRange(2, 1, 1, COLS).merge()
+    .setValue(
+      data.enCamino + ' en camino · ' + data.arribados + ' ya recibidos   ·   Actualizado ' +
+      Utilities.formatDate(new Date(data.generadoEn), Session.getScriptTimeZone(), "dd/MM/yyyy 'a las' HH:mm")
+    )
+    .setFontSize(10).setFontColor(GRIS_TEXTO).setBackground(AZUL_CLARO)
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(2, 24);
+  hoja.setRowHeight(3, 10);
 
-    // Los arribados en gris, para distinguirlos de un vistazo.
-    for (var i = 0; i < data.embarques.length; i++) {
-      if (data.embarques[i].arribado) {
-        hoja.getRange(i + 2, 1, 1, encabezado.length)
-          .setFontColor('#9aa0a6').setFontStyle('italic');
+  var filaEnc = 4;
+  var titulos = ['Embarque', 'Estado', 'Fecha de llegada', 'Cuánto falta', 'Ítems'];
+  hoja.getRange(filaEnc, 1, 1, COLS).setValues([titulos])
+    .setFontWeight('bold').setFontColor(AZUL).setBackground(AZUL_CLARO)
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(filaEnc, 30);
+
+  var embarques = data.embarques;
+  if (embarques.length) {
+    var filas = [];
+    for (var i = 0; i < embarques.length; i++) {
+      var e = embarques[i];
+      filas.push([
+        e.nombre,
+        e.estadoLabel,
+        e.arribado ? formatearFecha_(e.receivedAt) : formatearFecha_(e.eta),
+        textoLlegada_(e),
+        e.totales.items
+      ]);
+    }
+
+    var inicio = filaEnc + 1;
+    var rango = hoja.getRange(inicio, 1, filas.length, COLS);
+    rango.setValues(filas).setVerticalAlignment('middle');
+    hoja.setRowHeights(inicio, filas.length, 30);
+
+    hoja.getRange(inicio, 1, filas.length, 1).setFontWeight('bold');
+    hoja.getRange(inicio, 5, filas.length, 1).setHorizontalAlignment('center');
+
+    // Bandas y semáforo de llegada, fila por fila.
+    for (var j = 0; j < embarques.length; j++) {
+      var emb = embarques[j];
+      var fila = inicio + j;
+      if (j % 2 === 1) hoja.getRange(fila, 1, 1, COLS).setBackground(BANDA);
+
+      var col = coloresLlegada_(emb);
+      hoja.getRange(fila, 3, 1, 2)
+        .setBackground(col.bg).setFontColor(col.fg).setFontWeight('bold')
+        .setHorizontalAlignment('center');
+
+      if (emb.arribado) {
+        hoja.getRange(fila, 1, 1, 2).setFontColor(GRIS_TEXTO).setFontStyle('italic');
       }
     }
+
+    rango.setBorder(true, true, true, true, true, true, GRIS_BORDE, SpreadsheetApp.BorderStyle.SOLID);
+    limpiarSobrantes_(hoja, inicio + filas.length - 1, COLS);
   }
 
-  var pie = filas.length + 3;
-  hoja.getRange(pie, 1).setValue(
-    'Actualizado: ' + Utilities.formatDate(new Date(data.generadoEn), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') +
-    '  ·  ' + data.enCamino + ' en camino, ' + data.arribados + ' arribados (pestañas ocultas)'
-  ).setFontColor('#5f6368').setFontStyle('italic');
-
-  hoja.setFrozenRows(1);
-  hoja.autoResizeColumns(1, 4);
+  hoja.setFrozenRows(filaEnc);
   ss.setActiveSheet(hoja);
   return hoja;
 }
@@ -194,63 +271,93 @@ function escribirEmbarque_(ss, emb) {
   }
 
   hoja.clear();
-  // Las fotos son imágenes dentro de celda (=IMAGE), no objetos flotantes, así
-  // que clear() alcanza; no hace falta limpiar nada más.
+  hoja.setHiddenGridlines(true);
+  var COLS = COLUMNAS.length;
+  for (var w = 0; w < COLS; w++) hoja.setColumnWidth(w + 1, COLUMNAS[w].ancho);
 
-  var cabecera = [
-    [emb.nombre, '', '', '', '', '', '', '', '', '', ''],
-    ['Estado', emb.estadoLabel, 'Proveedor', emb.proveedor, 'Origen', emb.origen, '', '', '', '', ''],
-    ['ETA', aFecha_(emb.eta), 'Recibido', aFecha_(emb.receivedAt), 'Flete (USD)', emb.flete === null ? '' : emb.flete, '', '', '', '', ''],
-    ['Ítems', emb.totales.items, 'Unidades', emb.totales.unidades, 'CBM', emb.totales.cbm, 'Monto (USD)', emb.totales.monto, '', '', ''],
-    [emb.notas ? 'Notas: ' + emb.notas : '', '', '', '', '', '', '', '', '', '', ''],
-    ['', '', '', '', '', '', '', '', '', '', '']
-  ];
-  hoja.getRange(1, 1, cabecera.length, COLUMNAS.length).setValues(cabecera);
-  hoja.getRange(1, 1).setFontSize(14).setFontWeight('bold');
-  hoja.getRange(2, 1, 3, 1).setFontWeight('bold');
-  hoja.getRange(2, 3, 3, 1).setFontWeight('bold');
-  hoja.getRange(2, 5, 3, 1).setFontWeight('bold');
-  hoja.getRange(4, 7).setFontWeight('bold');
-  hoja.getRange(3, 2, 1, 3).setNumberFormat('dd/mm/yyyy');
+  // 1 · Nombre del embarque.
+  hoja.getRange(1, 1, 1, COLS).merge()
+    .setValue(emb.nombre)
+    .setFontSize(18).setFontWeight('bold')
+    .setFontColor(BLANCO).setBackground(AZUL)
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(1, 46);
 
-  var filaEncabezado = cabecera.length + 1;
+  // 2 · La fecha de llegada, en grande y con color. Es el dato principal.
+  var col = coloresLlegada_(emb);
+  var fecha = emb.arribado ? formatearFecha_(emb.receivedAt) : formatearFecha_(emb.eta);
+  hoja.getRange(2, 1, 1, COLS).merge()
+    .setValue(
+      (emb.arribado ? 'RECIBIDO' : 'LLEGADA ESTIMADA') +
+      (fecha ? '   ' + fecha : '') + '   ·   ' + textoLlegada_(emb)
+    )
+    .setFontSize(13).setFontWeight('bold')
+    .setBackground(col.bg).setFontColor(col.fg)
+    .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  hoja.setRowHeight(2, 38);
+
+  // 3 · Estado y volumen.
+  hoja.getRange(3, 1, 1, COLS).merge()
+    .setValue(
+      emb.estadoLabel + '   ·   ' + emb.totales.items + ' ítems   ·   ' +
+      miles_(emb.totales.unidades) + ' unidades'
+    )
+    .setFontSize(10).setFontColor(GRIS_TEXTO).setBackground(AZUL_CLARO)
+    .setVerticalAlignment('middle').setHorizontalAlignment('center');
+  hoja.setRowHeight(3, 24);
+
+  // 4 · Notas del embarque, sólo si hay.
+  var filaEnc = 5;
+  if (emb.notas) {
+    hoja.getRange(4, 1, 1, COLS).merge()
+      .setValue(emb.notas)
+      .setFontSize(10).setFontStyle('italic').setFontColor(GRIS_TEXTO)
+      .setVerticalAlignment('middle').setWrap(true);
+    hoja.setRowHeight(4, 28);
+    filaEnc = 6;
+    hoja.setRowHeight(5, 10);
+  } else {
+    hoja.setRowHeight(4, 10);
+  }
+
+  // Encabezado de la tabla.
   var titulos = COLUMNAS.map(function (c) { return c.titulo; });
-  hoja.getRange(filaEncabezado, 1, 1, titulos.length).setValues([titulos])
-    .setFontWeight('bold').setBackground('#f1f3f4').setWrap(true);
+  hoja.getRange(filaEnc, 1, 1, COLS).setValues([titulos])
+    .setFontWeight('bold').setFontColor(AZUL).setBackground(AZUL_CLARO)
+    .setVerticalAlignment('middle');
+  hoja.setRowHeight(filaEnc, 30);
 
   var filas = emb.items.map(function (it) {
     return [
-      it.foto ? '=IMAGE("' + it.foto + '", 4, 60, 60)' : '',
-      it.fila,
+      it.foto ? '=IMAGE("' + it.foto + '", 4, ' + LADO_FOTO + ', ' + LADO_FOTO + ')' : '',
       it.codigo,
-      it.unidades === null ? '' : it.unidades,
-      it.unidad,
-      it.precioFob === null ? '' : it.precioFob,
-      it.cbmUnitario === null ? '' : it.cbmUnitario,
-      it.cbmTotal === null ? '' : it.cbmTotal,
-      it.montoTotal === null ? '' : it.montoTotal,
-      it.costoFinal === null ? '' : it.costoFinal,
+      it.cantidad === null ? '' : it.cantidad,
       it.observaciones
     ];
   });
 
   if (filas.length) {
-    var inicio = filaEncabezado + 1;
-    hoja.getRange(inicio, 1, filas.length, COLUMNAS.length).setValues(filas);
-    for (var c = 0; c < COLUMNAS.length; c++) {
-      if (COLUMNAS[c].formato) {
-        hoja.getRange(inicio, c + 1, filas.length, 1).setNumberFormat(COLUMNAS[c].formato);
-      }
+    var inicio = filaEnc + 1;
+    var rango = hoja.getRange(inicio, 1, filas.length, COLS);
+    rango.setValues(filas).setVerticalAlignment('middle');
+    hoja.setRowHeights(inicio, filas.length, ALTO_FILA_ITEM);
+
+    hoja.getRange(inicio, 1, filas.length, 1).setHorizontalAlignment('center');
+    hoja.getRange(inicio, 2, filas.length, 1).setFontWeight('bold').setFontSize(11);
+    hoja.getRange(inicio, 3, filas.length, 1)
+      .setHorizontalAlignment('center').setNumberFormat('#,##0').setFontSize(11);
+    hoja.getRange(inicio, 4, filas.length, 1)
+      .setWrap(true).setFontColor(GRIS_TEXTO).setFontSize(10);
+
+    for (var b = 1; b < filas.length; b += 2) {
+      hoja.getRange(inicio + b, 1, 1, COLS).setBackground(BANDA);
     }
-    hoja.setRowHeights(inicio, filas.length, ALTO_FILA_FOTO);
-    hoja.getRange(inicio, 11, filas.length, 1).setWrap(true);
+
+    rango.setBorder(true, true, true, true, true, true, GRIS_BORDE, SpreadsheetApp.BorderStyle.SOLID);
+    limpiarSobrantes_(hoja, inicio + filas.length - 1, COLS);
   }
 
-  for (var w = 0; w < COLUMNAS.length; w++) {
-    hoja.setColumnWidth(w + 1, COLUMNAS[w].ancho);
-  }
-  hoja.setFrozenRows(filaEncabezado);
-
+  hoja.setFrozenRows(filaEnc);
   return hoja;
 }
 
@@ -303,7 +410,7 @@ function actualizar() {
   }
 
   ss.toast(
-    data.enCamino + ' en camino · ' + data.arribados + ' arribados',
+    data.enCamino + ' en camino · ' + data.arribados + ' recibidos',
     'Embarques actualizados'
   );
 }

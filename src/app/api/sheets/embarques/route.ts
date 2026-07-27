@@ -22,8 +22,22 @@ export async function GET(req: Request) {
   }
 
   try {
+    // Se seleccionan sólo las columnas que la planilla muestra. Nada de
+    // precios, CBM, flete ni montos: no viajan hasta acá, así no hay forma de
+    // que se filtren por descuido a un payload que se comparte.
     const containers = await prisma.container.findMany({
-      include: { products: { orderBy: { rowIndex: "asc" } } },
+      select: {
+        id: true,
+        name: true,
+        eta: true,
+        notes: true,
+        status: true,
+        receivedAt: true,
+        products: {
+          orderBy: { rowIndex: "asc" },
+          select: { codigo: true, photo: true, unidades: true, remark: true },
+        },
+      },
     });
     return NextResponse.json(buildSheetPayload(containers), {
       headers: { "Cache-Control": "no-store" },

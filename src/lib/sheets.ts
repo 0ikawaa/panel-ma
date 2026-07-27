@@ -4,9 +4,16 @@
 // pocos minutos contra /api/sheets/embarques y con este payload arma una
 // pestaña por embarque más una de resumen. Todo el armado vive acá —y no en la
 // route— para poder testearlo sin levantar la app ni tocar la base.
+//
+// IMPORTANTE: este feed es deliberadamente NO comercial. No expone precios FOB,
+// montos, CBM, flete ni costo nacionalizado. La planilla se comparte con gente
+// que sólo necesita saber qué viene y cuándo llega, y cualquiera con permiso de
+// edición sobre la hoja puede leer el token en las propiedades del Apps Script
+// y pegarle al endpoint a mano. Sacar las columnas de la vista no alcanzaría:
+// los datos no tienen que salir de acá. Si en algún momento hace falta un feed
+// con números, va como endpoint aparte y con su propio token.
 
 import { estadoEfectivo, estadoLabel, type Estado } from "./embarques";
-import { cbmPorUnidad, landedCost, type Origin } from "./cost";
 
 /** Nombre de la pestaña de resumen. Queda reservado: ningún embarque puede usarlo. */
 export const PESTANA_RESUMEN = "Resumen";
@@ -18,31 +25,22 @@ export const PESTANA_RESUMEN = "Resumen";
 const CARACTERES_INVALIDOS = /[[\]*?:/\\]/g;
 const LARGO_MAX_PESTANA = 90;
 
-// ---------- Entrada (lo que devuelve Prisma) ----------
+const MS_POR_DIA = 24 * 60 * 60 * 1000;
+
+// ---------- Entrada (el subconjunto de Prisma que realmente usamos) ----------
 
 export interface ProductoInput {
-  rowIndex: number;
   codigo: string | null;
   photo: string | null;
   unidades: number | null;
-  unidad: string | null;
-  precioChina: number | null;
-  cantidadPorCaja: number | null;
-  cbmUnitario: number | null;
-  cbmTotal: number | null;
-  montoTotal: number | null;
   remark: string | null;
 }
 
 export interface ContainerInput {
   id: string;
   name: string;
-  supplier: string | null;
   eta: Date | string | null;
   notes: string | null;
-  totalPrice: number | null;
-  freightCost: number | null;
-  origin: string;
   status: string | null;
   receivedAt: Date | string | null;
   products: ProductoInput[];
@@ -51,41 +49,33 @@ export interface ContainerInput {
 // ---------- Salida (lo que consume el Apps Script) ----------
 
 export interface ItemSheet {
-  fila: number;
   codigo: string;
   foto: string;
-  unidades: number | null;
-  unidad: string;
-  precioFob: number | null;
-  cbmUnitario: number | null;
-  cbmTotal: number | null;
-  montoTotal: number | null;
-  costoFinal: number | null;
+  cantidad: number | null;
   observaciones: string;
 }
 
 export interface TotalesSheet {
   items: number;
   unidades: number;
-  cbm: number;
-  monto: number;
 }
 
 export interface EmbarqueSheet {
   id: string;
   pestana: string;
   nombre: string;
-  proveedor: string;
-  origen: string;
   estado: Estado;
   estadoLabel: string;
   eta: string | null;
   receivedAt: string | null;
   /** true cuando ya ingresó a depósito: el script oculta la pestaña. */
   arribado: boolean;
+  /**
+   * Días que faltan para la ETA (negativo = la fecha ya pasó y no llegó,
+   * null = sin ETA cargada). El script pinta la fecha según esto.
+   */
+  diasParaLlegar: number | null;
   notas: string;
-  flete: number | null;
-  totalDeclarado: number | null;
   totales: TotalesSheet;
   items: ItemSheet[];
 }
@@ -137,8 +127,23 @@ function iso(v: Date | string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-function redondear(n: number, decimales: number): number {
-  return +n.toFixed(decimales);
+/** Medianoche UTC de una fecha, para comparar días de calendario sin arrastrar la hora. */
+function diaUtc(d: Date): number {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+/**
+ * Días de calendario que faltan hasta la ETA. 0 = llega hoy, negativo = la
+ * fecha ya pasó. null si no hay ETA cargada.
+ */
+export function diasHasta(
+  eta: Date | string | null | undefined,
+  hoy: Date,
+): number | null {
+  if (!eta) return null;
+  const d = eta instanceof Date ? eta : new Date(eta);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.round((diaUtc(d) - diaUtc(hoy)) / MS_POR_DIA);
 }
 
 /** Solo mandamos fotos servidas por http(s); un data URL base64 no lo renderiza =IMAGE(). */
@@ -149,34 +154,18 @@ function fotoUsable(photo: string | null): string {
 // ---------- Armado ----------
 
 function armarItems(c: ContainerInput): ItemSheet[] {
-  const origin = c.origin as Origin;
-  return c.products.map((p) => {
-    const cbmU = cbmPorUnidad(p.cbmUnitario, p.cantidadPorCaja);
-    const lc = landedCost(origin, p.precioChina, cbmU, c.freightCost);
-    return {
-      fila: p.rowIndex,
-      codigo: p.codigo ?? "",
-      foto: fotoUsable(p.photo),
-      unidades: p.unidades,
-      unidad: p.unidad ?? "",
-      precioFob: p.precioChina,
-      cbmUnitario: cbmU == null ? null : redondear(cbmU, 6),
-      cbmTotal: p.cbmTotal,
-      montoTotal: p.montoTotal,
-      costoFinal: lc ? redondear(lc.final, 4) : null,
-      observaciones: p.remark ?? "",
-    };
-  });
+  return c.products.map((p) => ({
+    codigo: p.codigo ?? "",
+    foto: fotoUsable(p.photo),
+    cantidad: p.unidades,
+    observaciones: p.remark ?? "",
+  }));
 }
 
 function armarTotales(items: ItemSheet[]): TotalesSheet {
-  const suma = (get: (i: ItemSheet) => number | null) =>
-    items.reduce((a, i) => a + (get(i) ?? 0), 0);
   return {
     items: items.length,
-    unidades: suma((i) => i.unidades),
-    cbm: redondear(suma((i) => i.cbmTotal), 4),
-    monto: redondear(suma((i) => i.montoTotal), 2),
+    unidades: items.reduce((a, i) => a + (i.cantidad ?? 0), 0),
   };
 }
 
@@ -186,25 +175,21 @@ function armarTotales(items: ItemSheet[]): TotalesSheet {
  * la planilla abre mostrando lo que todavía importa.
  */
 function ordenar(cs: ContainerInput[]): ContainerInput[] {
-  const clave = (c: ContainerInput) => {
-    const arribado = !!c.receivedAt;
-    const eta = iso(c.eta);
-    const rec = iso(c.receivedAt);
-    return { arribado, eta, rec };
-  };
   return [...cs].sort((a, b) => {
-    const ka = clave(a);
-    const kb = clave(b);
-    if (ka.arribado !== kb.arribado) return ka.arribado ? 1 : -1;
-    if (ka.arribado) {
+    const aArr = !!a.receivedAt;
+    const bArr = !!b.receivedAt;
+    if (aArr !== bArr) return aArr ? 1 : -1;
+    if (aArr) {
       // Recibidos: más reciente primero.
-      return (kb.rec ?? "").localeCompare(ka.rec ?? "");
+      return (iso(b.receivedAt) ?? "").localeCompare(iso(a.receivedAt) ?? "");
     }
     // En camino: ETA más próxima primero, sin ETA al fondo.
-    if (!ka.eta && !kb.eta) return a.name.localeCompare(b.name);
-    if (!ka.eta) return 1;
-    if (!kb.eta) return -1;
-    return ka.eta.localeCompare(kb.eta);
+    const aEta = iso(a.eta);
+    const bEta = iso(b.eta);
+    if (!aEta && !bEta) return a.name.localeCompare(b.name);
+    if (!aEta) return 1;
+    if (!bEta) return -1;
+    return aEta.localeCompare(bEta);
   });
 }
 
@@ -217,20 +202,19 @@ export function buildSheetPayload(
   const embarques = ordenar(containers).map((c) => {
     const estado = estadoEfectivo(c);
     const items = armarItems(c);
+    const arribado = estado === "deposito";
     return {
       id: c.id,
       pestana: nombrePestanaUnico(c.name, tomados),
       nombre: c.name,
-      proveedor: c.supplier ?? "",
-      origen: c.origin,
       estado,
       estadoLabel: estadoLabel(estado),
       eta: iso(c.eta),
       receivedAt: iso(c.receivedAt),
-      arribado: estado === "deposito",
+      arribado,
+      // Un embarque ya recibido no "falta"; la cuenta regresiva no aplica.
+      diasParaLlegar: arribado ? null : diasHasta(c.eta, generadoEn),
       notas: c.notes ?? "",
-      flete: c.freightCost,
-      totalDeclarado: c.totalPrice,
       totales: armarTotales(items),
       items,
     };

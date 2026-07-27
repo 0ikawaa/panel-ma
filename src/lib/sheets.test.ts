@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   PESTANA_RESUMEN,
   buildSheetPayload,
+  diasHasta,
   nombrePestanaUnico,
   sanitizarNombrePestana,
   type ContainerInput,
@@ -10,16 +11,9 @@ import {
 
 function producto(over: Partial<ProductoInput> = {}): ProductoInput {
   return {
-    rowIndex: 1,
     codigo: "16000",
     photo: null,
     unidades: 100,
-    unidad: "pc",
-    precioChina: 2,
-    cantidadPorCaja: 10,
-    cbmUnitario: 0.5,
-    cbmTotal: 5,
-    montoTotal: 200,
     remark: null,
     ...over,
   };
@@ -29,18 +23,16 @@ function contenedor(over: Partial<ContainerInput> = {}): ContainerInput {
   return {
     id: "c1",
     name: "Contenedor 1",
-    supplier: null,
     eta: null,
     notes: null,
-    totalPrice: null,
-    freightCost: 6800,
-    origin: "china",
     status: "transito",
     receivedAt: null,
     products: [producto()],
     ...over,
   };
 }
+
+const HOY = new Date("2026-07-27T13:00:00Z");
 
 describe("sanitizarNombrePestana", () => {
   it("saca los caracteres que Google Sheets no acepta", () => {
@@ -73,12 +65,33 @@ describe("nombrePestanaUnico", () => {
   });
 });
 
+describe("diasHasta", () => {
+  it("cuenta días de calendario, ignorando la hora", () => {
+    // La ETA a las 00:00 y "hoy" a las 13:00 siguen siendo el mismo día.
+    expect(diasHasta(new Date("2026-07-27T00:00:00Z"), HOY)).toBe(0);
+    expect(diasHasta(new Date("2026-07-28T00:00:00Z"), HOY)).toBe(1);
+    expect(diasHasta(new Date("2026-08-26T00:00:00Z"), HOY)).toBe(30);
+  });
+
+  it("devuelve negativo cuando la fecha ya pasó", () => {
+    expect(diasHasta(new Date("2026-07-25T00:00:00Z"), HOY)).toBe(-2);
+  });
+
+  it("devuelve null sin ETA o con fecha inválida", () => {
+    expect(diasHasta(null, HOY)).toBeNull();
+    expect(diasHasta("no es fecha", HOY)).toBeNull();
+  });
+});
+
 describe("buildSheetPayload", () => {
   it("marca como arribado lo que tiene receivedAt", () => {
-    const p = buildSheetPayload([
-      contenedor({ id: "a", name: "En camino" }),
-      contenedor({ id: "b", name: "Llegó", receivedAt: new Date("2026-07-01") }),
-    ]);
+    const p = buildSheetPayload(
+      [
+        contenedor({ id: "a", name: "En camino" }),
+        contenedor({ id: "b", name: "Llegó", receivedAt: new Date("2026-07-01") }),
+      ],
+      HOY,
+    );
     const porId = Object.fromEntries(p.embarques.map((e) => [e.id, e]));
     expect(porId.a.arribado).toBe(false);
     expect(porId.b.arribado).toBe(true);
@@ -88,20 +101,46 @@ describe("buildSheetPayload", () => {
   });
 
   it("respeta receivedAt aunque el status haya quedado viejo", () => {
-    // Mismo criterio que estadoEfectivo: la fecha manda sobre la columna.
-    const [e] = buildSheetPayload([
-      contenedor({ status: "produccion", receivedAt: new Date("2026-07-01") }),
-    ]).embarques;
+    const [e] = buildSheetPayload(
+      [contenedor({ status: "produccion", receivedAt: new Date("2026-07-01") })],
+      HOY,
+    ).embarques;
     expect(e.arribado).toBe(true);
   });
 
+  it("no cuenta días para llegar de algo ya recibido", () => {
+    const [e] = buildSheetPayload(
+      [contenedor({ eta: new Date("2026-08-10"), receivedAt: new Date("2026-07-01") })],
+      HOY,
+    ).embarques;
+    expect(e.diasParaLlegar).toBeNull();
+  });
+
+  it("calcula los días que faltan para la ETA", () => {
+    const p = buildSheetPayload(
+      [
+        contenedor({ id: "manana", eta: new Date("2026-07-28T00:00:00Z") }),
+        contenedor({ id: "vencido", eta: new Date("2026-07-20T00:00:00Z") }),
+        contenedor({ id: "sin-eta", eta: null }),
+      ],
+      HOY,
+    );
+    const porId = Object.fromEntries(p.embarques.map((e) => [e.id, e]));
+    expect(porId.manana.diasParaLlegar).toBe(1);
+    expect(porId.vencido.diasParaLlegar).toBe(-7);
+    expect(porId["sin-eta"].diasParaLlegar).toBeNull();
+  });
+
   it("ordena: en camino por ETA, después los arribados", () => {
-    const p = buildSheetPayload([
-      contenedor({ id: "recibido", name: "R", receivedAt: new Date("2026-06-01") }),
-      contenedor({ id: "sin-eta", name: "S", eta: null }),
-      contenedor({ id: "tarde", name: "T", eta: new Date("2026-09-01") }),
-      contenedor({ id: "pronto", name: "P", eta: new Date("2026-08-01") }),
-    ]);
+    const p = buildSheetPayload(
+      [
+        contenedor({ id: "recibido", name: "R", receivedAt: new Date("2026-06-01") }),
+        contenedor({ id: "sin-eta", name: "S", eta: null }),
+        contenedor({ id: "tarde", name: "T", eta: new Date("2026-09-01") }),
+        contenedor({ id: "pronto", name: "P", eta: new Date("2026-08-01") }),
+      ],
+      HOY,
+    );
     expect(p.embarques.map((e) => e.id)).toEqual([
       "pronto",
       "tarde",
@@ -110,52 +149,67 @@ describe("buildSheetPayload", () => {
     ]);
   });
 
-  it("calcula el costo final nacionalizado por ítem", () => {
-    // China: ((6800/68) * 0.05 + 2) * 1.33 * 1.22
-    const [e] = buildSheetPayload([contenedor()]).embarques;
-    expect(e.items[0].cbmUnitario).toBe(0.05);
-    expect(e.items[0].costoFinal).toBeCloseTo(11.36, 2);
+  it("expone sólo código, foto, cantidad y observaciones", () => {
+    // El feed es deliberadamente no comercial: si alguna vez vuelve a aparecer
+    // un precio o un costo acá, este test tiene que fallar.
+    const [e] = buildSheetPayload(
+      [contenedor({ products: [producto({ remark: "Sin caja" })] })],
+      HOY,
+    ).embarques;
+    expect(Object.keys(e.items[0]).sort()).toEqual([
+      "cantidad",
+      "codigo",
+      "foto",
+      "observaciones",
+    ]);
+    expect(JSON.stringify(e)).not.toMatch(/precio|costo|monto|cbm|flete|fob/i);
   });
 
   it("suma los totales del embarque", () => {
-    const [e] = buildSheetPayload([
-      contenedor({
-        products: [
-          producto({ rowIndex: 1, unidades: 100, cbmTotal: 5, montoTotal: 200 }),
-          producto({ rowIndex: 2, unidades: 50, cbmTotal: 2.5, montoTotal: 100 }),
-        ],
-      }),
-    ]).embarques;
-    expect(e.totales).toEqual({ items: 2, unidades: 150, cbm: 7.5, monto: 300 });
+    const [e] = buildSheetPayload(
+      [
+        contenedor({
+          products: [producto({ unidades: 100 }), producto({ unidades: 50 })],
+        }),
+      ],
+      HOY,
+    ).embarques;
+    expect(e.totales).toEqual({ items: 2, unidades: 150 });
   });
 
   it("no manda fotos en base64, solo URLs http", () => {
     // =IMAGE() de Sheets no renderiza data URLs; mandarlas solo infla el payload.
-    const [e] = buildSheetPayload([
-      contenedor({
-        products: [
-          producto({ rowIndex: 1, photo: "data:image/png;base64,AAAA" }),
-          producto({ rowIndex: 2, photo: "https://x.public.blob.vercel-storage.com/a.png" }),
-        ],
-      }),
-    ]).embarques;
+    const [e] = buildSheetPayload(
+      [
+        contenedor({
+          products: [
+            producto({ photo: "data:image/png;base64,AAAA" }),
+            producto({ photo: "https://x.public.blob.vercel-storage.com/a.png" }),
+          ],
+        }),
+      ],
+      HOY,
+    ).embarques;
     expect(e.items[0].foto).toBe("");
     expect(e.items[1].foto).toBe("https://x.public.blob.vercel-storage.com/a.png");
   });
 
   it("asigna una pestaña única por embarque", () => {
-    const p = buildSheetPayload([
-      contenedor({ id: "a", name: "Contenedor 1" }),
-      contenedor({ id: "b", name: "Contenedor 1" }),
-    ]);
+    const p = buildSheetPayload(
+      [
+        contenedor({ id: "a", name: "Contenedor 1" }),
+        contenedor({ id: "b", name: "Contenedor 1" }),
+      ],
+      HOY,
+    );
     const pestanas = p.embarques.map((e) => e.pestana);
     expect(new Set(pestanas).size).toBe(2);
     expect(pestanas).toContain("Contenedor 1");
   });
 
   it("tolera un contenedor sin productos", () => {
-    const [e] = buildSheetPayload([contenedor({ products: [] })]).embarques;
+    const [e] = buildSheetPayload([contenedor({ products: [] })], HOY).embarques;
     expect(e.items).toEqual([]);
-    expect(e.totales).toEqual({ items: 0, unidades: 0, cbm: 0, monto: 0 });
+    expect(e.totales).toEqual({ items: 0, unidades: 0 });
   });
 });
