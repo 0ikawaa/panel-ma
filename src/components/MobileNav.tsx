@@ -14,6 +14,7 @@ const NAV = [
   { href: "/ordenes", module: "ordenes", label: "Órdenes ML" },
   { href: "/reposicion", module: "reposicion", label: "Reposición" },
   { href: "/reportes", module: "reportes", label: "Reportes" },
+  { href: "/agendas", module: "agendas", label: "Agendas" },
   { href: "/admin", module: "admin", label: "Admin" },
 ];
 
