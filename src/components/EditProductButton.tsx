@@ -52,7 +52,9 @@ export default function EditProductButton({
   const [codigo, setCodigo] = useState(product.codigo ?? "");
   const [remark, setRemark] = useState(product.remark ?? "");
   const [cbmU, setCbmU] = useState("");
-  const [photo, setPhoto] = useState<string | null>(product.photo);
+  // Siempre la foto guardada del producto, nunca la de MercadoLibre que la
+  // tabla puede estar mostrando en su lugar: guardar esa pisaría la propia.
+  const [photo, setPhoto] = useState<string | null>(product.photoStored ?? null);
   const [lines, setLines] = useState<LineDraft[]>(() => toDrafts(product.detalle));
   const [loading, setLoading] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
@@ -68,7 +70,7 @@ export default function EditProductButton({
     setCodigo(product.codigo ?? "");
     setRemark(product.remark ?? "");
     setCbmU(cbmUnidadActual());
-    setPhoto(product.photo);
+    setPhoto(product.photoStored ?? null);
     setLines(toDrafts(product.detalle));
     setError(null);
     setOpen(true);
@@ -231,6 +233,11 @@ export default function EditProductButton({
                       </button>
                     )}
                   </div>
+                  {product.photo && product.photo !== photo && (
+                    <p className="mt-1.5 max-w-[9rem] text-[10px] leading-snug text-amber-300/80">
+                      En la tabla se muestra la foto de MercadoLibre, que tiene prioridad.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex-1 space-y-3">

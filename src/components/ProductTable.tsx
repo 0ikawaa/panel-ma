@@ -17,7 +17,10 @@ export interface DetalleLinea {
 export interface ProductRow {
   id: string;
   rowIndex: number;
+  /** Foto a mostrar: puede ser la de MercadoLibre si el código tiene publicación. */
   photo: string | null;
+  /** Foto guardada en el producto. Es la única editable. */
+  photoStored?: string | null;
   codigo: string | null;
   precioChina: number | null;
   cbmUnitario: number | null;

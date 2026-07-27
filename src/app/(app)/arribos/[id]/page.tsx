@@ -48,6 +48,10 @@ export default async function ContainerDetailPage({
     id: p.id,
     rowIndex: p.rowIndex,
     photo: resolveMlPhoto(mlPhotos, p.codigo) ?? p.photo,
+    // La foto que se muestra puede venir de ML; la editable es siempre la que
+    // está guardada en el producto. Si se mezclan, editar termina pisando la
+    // foto propia con la URL de MercadoLibre.
+    photoStored: p.photo,
     codigo: p.codigo,
     precioChina: p.precioChina,
     cbmUnitario: p.cbmUnitario,

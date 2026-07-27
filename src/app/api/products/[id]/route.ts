@@ -88,16 +88,20 @@ export async function PATCH(
 
   if ("photo" in body) {
     const nueva = strOrNull(body.photo);
-    // Solo aceptamos URLs de nuestro propio Blob: el navegador sube ahí primero
-    // y recién después manda la URL. Así la foto no puede quedar apuntando a un
-    // dominio ajeno que después se caiga o sirva otra cosa.
-    if (nueva !== null && !isBlobPhoto(nueva)) {
-      return NextResponse.json(
-        { error: "La foto tiene que subirse desde el panel." },
-        { status: 400 },
-      );
-    }
+    // La validación va sólo si la foto cambió. Si se valida siempre, editar
+    // cualquier otro campo de un producto cuya foto guardada no cumpla la regla
+    // falla sin motivo, y el mensaje ("subila desde el panel") no tiene nada
+    // que ver con lo que la persona estaba haciendo.
     if (nueva !== actual.photo) {
+      // Solo aceptamos URLs de nuestro propio Blob: el navegador sube ahí
+      // primero y recién después manda la URL. Así la foto no puede quedar
+      // apuntando a un dominio ajeno que después se caiga o sirva otra cosa.
+      if (nueva !== null && !isBlobPhoto(nueva)) {
+        return NextResponse.json(
+          { error: "La foto tiene que subirse desde el panel." },
+          { status: 400 },
+        );
+      }
       data.photo = nueva;
       // La anterior se borra recién si el guardado sale bien.
       if (isBlobPhoto(actual.photo)) fotoAnterior = actual.photo;
