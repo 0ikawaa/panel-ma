@@ -74,7 +74,13 @@ export async function PATCH(
 
   const actual = await prisma.product.findUnique({
     where: { id },
-    select: { photo: true, cantidadPorCaja: true },
+    select: {
+      photo: true,
+      cantidadPorCaja: true,
+      cbmUnitario: true,
+      detalle: true,
+      containerId: true,
+    },
   });
   if (!actual) {
     return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
@@ -110,17 +116,29 @@ export async function PATCH(
 
   // La pantalla edita el CBM por unidad (lo que se ve en la tabla y lo que
   // entra al costo final); la base guarda el CBM por caja.
-  if ("cbmPorUnidad" in body) {
-    const { cbmUnitario, cantidadPorCaja } = cbmCajaDesdeUnidad(
-      numOrNull(body.cbmPorUnidad),
-      actual.cantidadPorCaja,
-    );
+  const cambiaCbm = "cbmPorUnidad" in body;
+  let cbmU: number | null;
+  if (cambiaCbm) {
+    cbmU = numOrNull(body.cbmPorUnidad);
+    const { cbmUnitario, cantidadPorCaja } = cbmCajaDesdeUnidad(cbmU, actual.cantidadPorCaja);
     data.cbmUnitario = cbmUnitario;
     data.cantidadPorCaja = cantidadPorCaja;
+  } else {
+    cbmU =
+      actual.cbmUnitario != null && actual.cantidadPorCaja
+        ? actual.cbmUnitario / actual.cantidadPorCaja
+        : null;
   }
 
-  if ("detalle" in body) {
-    const lineas = calcularLineas(sanitizeDetalle(body.detalle));
+  // Cambiar el CBM por unidad tiene que arrastrar el CBM total del ítem —y con
+  // él el del contenedor, que se suma en vivo—, así que se recalcula el detalle
+  // aunque la edición no lo haya tocado.
+  if ("detalle" in body || cambiaCbm) {
+    const base =
+      "detalle" in body
+        ? sanitizeDetalle(body.detalle)
+        : sanitizeDetalle(actual.detalle);
+    const lineas = calcularLineas(base, cbmU);
     data.detalle = lineas as unknown as Prisma.InputJsonValue;
     // Los agregados del ítem se derivan de las líneas; no llegan del cliente.
     const ag = agregarLineas(lineas);
@@ -136,6 +154,22 @@ export async function PATCH(
 
   try {
     const product = await prisma.product.update({ where: { id }, data });
+
+    // El precio del contenedor es una columna guardada que hasta ahora sólo
+    // escribía la importación del Excel. La leen el detalle, el tablero, la
+    // home y el dashboard, así que si no se recalcula acá, editar un producto
+    // la deja vieja en cuatro pantallas a la vez.
+    if (data.montoTotal !== undefined) {
+      const suma = await prisma.product.aggregate({
+        where: { containerId: actual.containerId },
+        _sum: { montoTotal: true },
+      });
+      await prisma.container.update({
+        where: { id: actual.containerId },
+        data: { totalPrice: suma._sum.montoTotal ?? null },
+      });
+    }
+
     if (fotoAnterior) {
       // Si falla el borrado queda un archivo huérfano en Blob y nada más; no
       // tiene sentido voltear una edición ya guardada por eso.

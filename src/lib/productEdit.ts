@@ -56,9 +56,30 @@ export function montoLinea(
   return redondear(unidades * precioChina, 6);
 }
 
-/** Completa cada línea con su monto calculado. */
-export function calcularLineas(lineas: LineaEditable[]): LineaCalculada[] {
-  return lineas.map((l) => ({ ...l, monto: montoLinea(l.unidades, l.precioChina) }));
+/**
+ * Completa cada línea con sus derivados: el monto y, si se conoce el CBM por
+ * unidad del producto, también el CBM de la línea.
+ *
+ * El CBM se deriva en vez de arrastrarse del Excel porque los valores
+ * importados no cierran: el Contenedor 22 figuraba con 118,394 CBM cuando en un
+ * contenedor entran 68 (CBM_POR_CONTENEDOR). Ese número salía de sumar líneas
+ * contadas dos veces en los ítems agrupados; derivándolo da 67,684.
+ *
+ * Si no hay CBM por unidad no se puede calcular, y entonces se respeta el valor
+ * que ya tenía la línea en lugar de borrarlo.
+ */
+export function calcularLineas(
+  lineas: LineaEditable[],
+  cbmPorUnidad?: number | null,
+): LineaCalculada[] {
+  return lineas.map((l) => ({
+    ...l,
+    monto: montoLinea(l.unidades, l.precioChina),
+    cbmTotal:
+      esNumero(cbmPorUnidad) && esNumero(l.unidades)
+        ? redondear(cbmPorUnidad * l.unidades, 6)
+        : l.cbmTotal,
+  }));
 }
 
 /** Suma un campo de las líneas; null si ninguna lo tiene cargado. */

@@ -105,6 +105,31 @@ describe("agregarLineas", () => {
   });
 });
 
+describe("calcularLineas y el CBM", () => {
+  it("deriva el CBM de cada línea del CBM por unidad", () => {
+    const lineas = calcularLineas(
+      [linea({ unidades: 500, cbmTotal: 50 }), linea({ unidades: 200, cbmTotal: 20 })],
+      0.01,
+    );
+    expect(lineas[0].cbmTotal).toBe(5);
+    expect(lineas[1].cbmTotal).toBe(2);
+    expect(agregarLineas(lineas).cbmTotal).toBe(7);
+  });
+
+  it("respeta el CBM existente si no hay CBM por unidad", () => {
+    // Sin el dato no se puede calcular; borrarlo sería perder información.
+    const lineas = calcularLineas([linea({ cbmTotal: 5 })], null);
+    expect(lineas[0].cbmTotal).toBe(5);
+  });
+
+  it("cambiar el CBM por unidad arrastra el total del ítem", () => {
+    const antes = agregarLineas(calcularLineas([linea({ unidades: 500 })], 0.01));
+    const despues = agregarLineas(calcularLineas([linea({ unidades: 500 })], 0.02));
+    expect(antes.cbmTotal).toBe(5);
+    expect(despues.cbmTotal).toBe(10);
+  });
+});
+
 describe("cbmCajaDesdeUnidad", () => {
   it("es el inverso exacto de cbmPorUnidad", () => {
     const { cbmUnitario, cantidadPorCaja } = cbmCajaDesdeUnidad(0.05, 10);
