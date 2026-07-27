@@ -4,6 +4,7 @@ import {
   calcularLineas,
   cbmCajaDesdeUnidad,
   montoLinea,
+  sanitizeDetalle,
   type LineaEditable,
 } from "./productEdit";
 import { cbmPorUnidad } from "./cost";
@@ -148,6 +149,34 @@ describe("cbmCajaDesdeUnidad", () => {
     expect(cbmCajaDesdeUnidad(null, 12)).toEqual({
       cbmUnitario: null,
       cantidadPorCaja: 12,
+    });
+  });
+});
+
+describe("sanitizeDetalle", () => {
+  it("normaliza lo que manda la pantalla", () => {
+    const lineas = sanitizeDetalle([
+      { codigos: [" 16000 ", "", "16001"], unidades: "100.4", precioChina: "2.5", remark: "  " },
+    ]);
+    expect(lineas).toEqual([
+      {
+        codigos: ["16000", "16001"],
+        unidades: 100,
+        precioChina: 2.5,
+        cbmTotal: null,
+        remark: null,
+      },
+    ]);
+  });
+
+  it("un alta sin detalle no rompe: no hay líneas y los agregados quedan vacíos", () => {
+    // El alta manual puede llegar sin nada cargado todavía.
+    expect(sanitizeDetalle(undefined)).toEqual([]);
+    expect(agregarLineas(calcularLineas(sanitizeDetalle(null), null))).toEqual({
+      unidades: null,
+      montoTotal: null,
+      cbmTotal: null,
+      precioChina: null,
     });
   });
 });

@@ -37,6 +37,46 @@ function esNumero(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+/** Número del body de una request, o null si viene vacío o no es numérico. */
+export function numOrNull(v: unknown): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return isFinite(n) ? n : null;
+}
+
+/** Igual que `numOrNull` pero redondeado: las unidades son enteras. */
+export function intOrNull(v: unknown): number | null {
+  const n = numOrNull(v);
+  return n === null ? null : Math.round(n);
+}
+
+/** Texto del body sin espacios sobrantes; "" cuenta como "sin dato". */
+export function strOrNull(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  const s = String(v).trim();
+  return s === "" ? null : s;
+}
+
+/**
+ * Normaliza el detalle que manda la pantalla. Nunca se confía en el monto que
+ * venga del cliente: se recalcula acá con `calcularLineas`.
+ */
+export function sanitizeDetalle(input: unknown): LineaEditable[] {
+  if (!Array.isArray(input)) return [];
+  return input.map((l) => {
+    const line = (l ?? {}) as Record<string, unknown>;
+    return {
+      codigos: Array.isArray(line.codigos)
+        ? line.codigos.map((c) => String(c).trim()).filter(Boolean)
+        : [],
+      unidades: intOrNull(line.unidades),
+      precioChina: numOrNull(line.precioChina),
+      cbmTotal: numOrNull(line.cbmTotal),
+      remark: strOrNull(line.remark),
+    };
+  });
+}
+
 /**
  * Precio del lote de una línea = unidades × precio unitario.
  * null si falta cualquiera de los dos (no asumimos 0: "sin dato" y "vale cero"

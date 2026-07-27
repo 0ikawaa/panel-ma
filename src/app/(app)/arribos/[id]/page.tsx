@@ -7,6 +7,7 @@ import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import { mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
+import AddProductButton from "@/components/AddProductButton";
 import DeleteContainerButton from "@/components/DeleteContainerButton";
 import EditEtaButton from "@/components/EditEtaButton";
 import EditFreightButton from "@/components/EditFreightButton";
@@ -14,6 +15,7 @@ import ReceiveButton from "@/components/ReceiveButton";
 import OriginSwitch from "@/components/OriginSwitch";
 import ContainerDocsPanel from "@/components/ContainerDocsPanel";
 import { estadoEfectivo } from "@/lib/embarques";
+import type { Origin } from "@/lib/cost";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +118,13 @@ export default async function ContainerDetailPage({
               </svg>
               Exportar Excel
             </a>
+          )}
+          {canEdit && (
+            <AddProductButton
+              containerId={container.id}
+              origin={container.origin as Origin}
+              freightCost={container.freightCost}
+            />
           )}
           <UploadExcel containerId={container.id} hasProducts={products.length > 0} />
           <DeleteContainerButton containerId={container.id} containerName={container.name} />
@@ -268,12 +277,20 @@ export default async function ContainerDetailPage({
             incrustadas se extraen automáticamente y los ítems con varias líneas se
             agrupan solos.
           </p>
-          <div className="mt-6">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             <UploadExcel containerId={container.id} hasProducts={false} />
+            {canEdit && (
+              <AddProductButton
+                containerId={container.id}
+                origin={container.origin as Origin}
+                freightCost={container.freightCost}
+              />
+            )}
           </div>
         </div>
       ) : (
         <ProductTable
+          containerId={container.id}
           products={rows}
           freightCost={container.freightCost}
           origin={container.origin}

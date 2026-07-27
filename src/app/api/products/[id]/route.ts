@@ -4,45 +4,15 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { deleteBlobUrls, isBlobPhoto } from "@/lib/photos";
+import { recalcularPrecioContenedor } from "@/lib/containerTotals";
 import {
   agregarLineas,
   calcularLineas,
   cbmCajaDesdeUnidad,
-  type LineaEditable,
+  numOrNull,
+  sanitizeDetalle,
+  strOrNull,
 } from "@/lib/productEdit";
-
-function numOrNull(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
-  const n = Number(v);
-  return isFinite(n) ? n : null;
-}
-
-function intOrNull(v: unknown): number | null {
-  const n = numOrNull(v);
-  return n === null ? null : Math.round(n);
-}
-
-function strOrNull(v: unknown): string | null {
-  if (v === null || v === undefined) return null;
-  const s = String(v).trim();
-  return s === "" ? null : s;
-}
-
-function sanitizeDetalle(input: unknown): LineaEditable[] {
-  if (!Array.isArray(input)) return [];
-  return input.map((l) => {
-    const line = (l ?? {}) as Record<string, unknown>;
-    return {
-      codigos: Array.isArray(line.codigos)
-        ? line.codigos.map((c) => String(c).trim()).filter(Boolean)
-        : [],
-      unidades: intOrNull(line.unidades),
-      precioChina: numOrNull(line.precioChina),
-      cbmTotal: numOrNull(line.cbmTotal),
-      remark: strOrNull(line.remark),
-    };
-  });
-}
 
 // PATCH /api/products/:id
 //
@@ -155,19 +125,8 @@ export async function PATCH(
   try {
     const product = await prisma.product.update({ where: { id }, data });
 
-    // El precio del contenedor es una columna guardada que hasta ahora sólo
-    // escribía la importación del Excel. La leen el detalle, el tablero, la
-    // home y el dashboard, así que si no se recalcula acá, editar un producto
-    // la deja vieja en cuatro pantallas a la vez.
     if (data.montoTotal !== undefined) {
-      const suma = await prisma.product.aggregate({
-        where: { containerId: actual.containerId },
-        _sum: { montoTotal: true },
-      });
-      await prisma.container.update({
-        where: { id: actual.containerId },
-        data: { totalPrice: suma._sum.montoTotal ?? null },
-      });
+      await recalcularPrecioContenedor(actual.containerId);
     }
 
     if (fotoAnterior) {
@@ -179,4 +138,43 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "No se pudo guardar el producto." }, { status: 500 });
   }
+}
+
+// DELETE /api/products/:id
+//
+// Borra un ítem del embarque. Como el alta y la edición, sólo el superadmin.
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const token = (await cookies()).get(AUTH_COOKIE)?.value;
+  const session = await verifySessionToken(token);
+  if (!session?.isAdmin) {
+    return NextResponse.json(
+      { error: "Solo el administrador puede borrar los productos." },
+      { status: 403 },
+    );
+  }
+
+  const { id } = await params;
+  const actual = await prisma.product.findUnique({
+    where: { id },
+    select: { photo: true, containerId: true },
+  });
+  if (!actual) {
+    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
+
+  try {
+    await prisma.product.delete({ where: { id } });
+  } catch {
+    return NextResponse.json({ error: "No se pudo borrar el producto." }, { status: 500 });
+  }
+
+  await recalcularPrecioContenedor(actual.containerId);
+  // La foto se borra de Blob recién con la fila ya eliminada; si falla queda un
+  // archivo huérfano y nada más.
+  await deleteBlobUrls([actual.photo]).catch(() => {});
+
+  return NextResponse.json({ ok: true });
 }

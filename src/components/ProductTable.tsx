@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { fmtCBM, fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
 import { landedCost, cbmPorUnidad, IVA, type Origin } from "@/lib/cost";
 import EditProductButton from "./EditProductButton";
+import DeleteProductButton from "./DeleteProductButton";
 
 export interface DetalleLinea {
   codigos: string[];
@@ -41,11 +42,13 @@ function hasDetail(p: ProductRow): boolean {
 }
 
 export default function ProductTable({
+  containerId,
   products,
   freightCost,
   origin,
   canEdit = false,
 }: {
+  containerId: string;
   products: ProductRow[];
   freightCost: number | null;
   origin: string;
@@ -195,7 +198,17 @@ export default function ProductTable({
                       <span className="truncate font-semibold text-zinc-100">
                         {p.codigo ?? <span className="text-zinc-600">—</span>}
                       </span>
-                      {canEdit && <span onClick={(e) => e.stopPropagation()}><EditProductButton product={p} origin={origin as Origin} freightCost={freightCost} /></span>}
+                      {canEdit && (
+                        <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <EditProductButton
+                            containerId={containerId}
+                            product={p}
+                            origin={origin as Origin}
+                            freightCost={freightCost}
+                          />
+                          <DeleteProductButton productId={p.id} codigo={p.codigo} />
+                        </span>
+                      )}
                       {expandable && (
                         <svg
                           viewBox="0 0 24 24"
@@ -338,7 +351,17 @@ export default function ProductTable({
                             detalle
                           </span>
                         )}
-                        {canEdit && <EditProductButton product={p} origin={origin as Origin} freightCost={freightCost} />}
+                        {canEdit && (
+                          <span className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <EditProductButton
+                              containerId={containerId}
+                              product={p}
+                              origin={origin as Origin}
+                              freightCost={freightCost}
+                            />
+                            <DeleteProductButton productId={p.id} codigo={p.codigo} />
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-white">
