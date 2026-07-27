@@ -192,7 +192,7 @@ export default function ProductTable({
                       <span className="truncate font-semibold text-zinc-100">
                         {p.codigo ?? <span className="text-zinc-600">—</span>}
                       </span>
-                      {canEdit && <span onClick={(e) => e.stopPropagation()}><EditProductButton product={p} /></span>}
+                      {canEdit && <span onClick={(e) => e.stopPropagation()}><EditProductButton product={p} origin={origin as Origin} freightCost={freightCost} /></span>}
                       {expandable && (
                         <svg
                           viewBox="0 0 24 24"
@@ -335,7 +335,7 @@ export default function ProductTable({
                             detalle
                           </span>
                         )}
-                        {canEdit && <EditProductButton product={p} />}
+                        {canEdit && <EditProductButton product={p} origin={origin as Origin} freightCost={freightCost} />}
                       </div>
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-white">
@@ -476,6 +476,15 @@ function DetallePanel({
                   {l.unidades !== null && (
                     <span>
                       <span className="font-semibold text-white">{fmtInt(l.unidades)}</span> u.
+                    </span>
+                  )}
+                  {/* Cada línea puede tener su propio precio de origen: es lo que
+                      hace que el precio del lote se calcule por línea y no con
+                      el precio representativo del ítem. */}
+                  {l.precioChina !== null && (
+                    <span>
+                      <span className="text-zinc-500">China</span>{" "}
+                      <span className="font-semibold text-red-300">{fmtUSD(l.precioChina)}</span>
                     </span>
                   )}
                   {l.monto !== null && <span className="text-zinc-300">{fmtUSD(l.monto)}</span>}

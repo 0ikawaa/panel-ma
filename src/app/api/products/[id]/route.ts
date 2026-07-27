@@ -3,15 +3,13 @@ import { cookies } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
-
-interface DetalleLinea {
-  codigos: string[];
-  unidades: number | null;
-  monto: number | null;
-  cbmTotal: number | null;
-  precioChina: number | null;
-  remark: string | null;
-}
+import { deleteBlobUrls, isBlobPhoto } from "@/lib/photos";
+import {
+  agregarLineas,
+  calcularLineas,
+  cbmCajaDesdeUnidad,
+  type LineaEditable,
+} from "@/lib/productEdit";
 
 function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined || v === "") return null;
@@ -30,7 +28,7 @@ function strOrNull(v: unknown): string | null {
   return s === "" ? null : s;
 }
 
-function sanitizeDetalle(input: unknown): DetalleLinea[] {
+function sanitizeDetalle(input: unknown): LineaEditable[] {
   if (!Array.isArray(input)) return [];
   return input.map((l) => {
     const line = (l ?? {}) as Record<string, unknown>;
@@ -39,29 +37,25 @@ function sanitizeDetalle(input: unknown): DetalleLinea[] {
         ? line.codigos.map((c) => String(c).trim()).filter(Boolean)
         : [],
       unidades: intOrNull(line.unidades),
-      monto: numOrNull(line.monto),
-      cbmTotal: numOrNull(line.cbmTotal),
       precioChina: numOrNull(line.precioChina),
+      cbmTotal: numOrNull(line.cbmTotal),
       remark: strOrNull(line.remark),
     };
   });
 }
 
-/** Suma un campo numérico de las líneas: null si ninguna lo tiene. */
-function sumField(lines: DetalleLinea[], key: "unidades" | "monto" | "cbmTotal"): number | null {
-  let acc = 0;
-  let any = false;
-  for (const l of lines) {
-    const v = l[key];
-    if (typeof v === "number" && isFinite(v)) {
-      acc += v;
-      any = true;
-    }
-  }
-  return any ? +acc.toFixed(6) : null;
-}
-
-// PATCH /api/products/:id  -> editar código, observaciones y detalle (solo Matias)
+// PATCH /api/products/:id
+//
+// Edición de un producto del embarque. Solo el superadmin (Matías): los demás
+// usuarios, incluso los que tienen el módulo "admin", reciben 403.
+//
+// Se puede editar: foto, código, observaciones, CBM por unidad y el detalle por
+// línea (códigos, unidades, precio de origen y observación de cada una).
+//
+// NO se editan a mano el precio del lote ni el costo final. El primero se
+// calcula por línea (unidades × precio) y se suma; el segundo sale de
+// landedCost() al mostrarlo. En lib/productEdit.ts está por qué el cálculo va
+// por línea y no a nivel ítem.
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -78,19 +72,58 @@ export async function PATCH(
   const { id } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
+  const actual = await prisma.product.findUnique({
+    where: { id },
+    select: { photo: true, cantidadPorCaja: true },
+  });
+  if (!actual) {
+    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+  }
+
   const data: Prisma.ProductUpdateInput = {};
+  let fotoAnterior: string | null = null;
 
   if ("codigo" in body) data.codigo = strOrNull(body.codigo);
   if ("remark" in body) data.remark = strOrNull(body.remark);
 
+  if ("photo" in body) {
+    const nueva = strOrNull(body.photo);
+    // Solo aceptamos URLs de nuestro propio Blob: el navegador sube ahí primero
+    // y recién después manda la URL. Así la foto no puede quedar apuntando a un
+    // dominio ajeno que después se caiga o sirva otra cosa.
+    if (nueva !== null && !isBlobPhoto(nueva)) {
+      return NextResponse.json(
+        { error: "La foto tiene que subirse desde el panel." },
+        { status: 400 },
+      );
+    }
+    if (nueva !== actual.photo) {
+      data.photo = nueva;
+      // La anterior se borra recién si el guardado sale bien.
+      if (isBlobPhoto(actual.photo)) fotoAnterior = actual.photo;
+    }
+  }
+
+  // La pantalla edita el CBM por unidad (lo que se ve en la tabla y lo que
+  // entra al costo final); la base guarda el CBM por caja.
+  if ("cbmPorUnidad" in body) {
+    const { cbmUnitario, cantidadPorCaja } = cbmCajaDesdeUnidad(
+      numOrNull(body.cbmPorUnidad),
+      actual.cantidadPorCaja,
+    );
+    data.cbmUnitario = cbmUnitario;
+    data.cantidadPorCaja = cantidadPorCaja;
+  }
+
   if ("detalle" in body) {
-    const det = sanitizeDetalle(body.detalle);
-    data.detalle = det as unknown as Prisma.InputJsonValue;
-    // Recalcular los agregados desde las líneas para mantener la tabla consistente.
-    // No se tocan precioChina / cbmUnitario / cantidadPorCaja: el costo final no cambia.
-    data.unidades = sumField(det, "unidades");
-    data.montoTotal = sumField(det, "monto");
-    data.cbmTotal = sumField(det, "cbmTotal");
+    const lineas = calcularLineas(sanitizeDetalle(body.detalle));
+    data.detalle = lineas as unknown as Prisma.InputJsonValue;
+    // Los agregados del ítem se derivan de las líneas; no llegan del cliente.
+    const ag = agregarLineas(lineas);
+    data.unidades = ag.unidades;
+    data.montoTotal = ag.montoTotal;
+    data.cbmTotal = ag.cbmTotal;
+    data.precioChina = ag.precioChina;
   }
 
   if (Object.keys(data).length === 0) {
@@ -99,8 +132,13 @@ export async function PATCH(
 
   try {
     const product = await prisma.product.update({ where: { id }, data });
+    if (fotoAnterior) {
+      // Si falla el borrado queda un archivo huérfano en Blob y nada más; no
+      // tiene sentido voltear una edición ya guardada por eso.
+      await deleteBlobUrls([fotoAnterior]).catch(() => {});
+    }
     return NextResponse.json(product);
   } catch {
-    return NextResponse.json({ error: "Producto no encontrado" }, { status: 404 });
+    return NextResponse.json({ error: "No se pudo guardar el producto." }, { status: 500 });
   }
 }
