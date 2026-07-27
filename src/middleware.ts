@@ -3,8 +3,16 @@ import type { NextRequest } from "next/server";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { moduleForPath, firstAllowedPath } from "@/lib/modules";
 
-// Rutas públicas (no requieren sesión). /api/cron lo protege CRON_SECRET adentro.
-const PUBLIC_PATHS = ["/login", "/api/login", "/api/blob/upload", "/api/cron"];
+// Rutas públicas (no requieren sesión). /api/cron lo protege CRON_SECRET
+// adentro; /api/sheets, SHEETS_TOKEN (lo consume Google Sheets, que no puede
+// mandar la cookie de sesión).
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/login",
+  "/api/blob/upload",
+  "/api/cron",
+  "/api/sheets",
+];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

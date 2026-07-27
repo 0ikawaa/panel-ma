@@ -89,6 +89,7 @@ npm run build   # build de producción (corre prisma generate + prisma db push +
 | `AUTH_SECRET` | Secreto para firmar la cookie de sesión (poné uno largo y aleatorio). |
 | `MUNDOSHOP_BASE_URL` / `MUNDOSHOP_API_KEY` | API externa de Odoo + MercadoLibre. |
 | `CRON_SECRET` | Protege el endpoint del cron diario de reportes. |
+| `SHEETS_TOKEN` | Protege el feed de embarques que consume la planilla de Google Sheets (opcional; sin él, el feed queda cerrado). |
 | `REPORT_WHATSAPP_TO` | Número(s) destino del reporte por WhatsApp (opcional). |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Envío por WhatsApp vía Meta Cloud API (opcional; si faltan, el reporte igual se genera y se muestra). |
 
@@ -107,6 +108,21 @@ El reporte **Ventas aceleradas** puede correr y enviarse solo todos los días. E
 
 `12:00 UTC` = **09:00 de Uruguay** (UTC-3). El endpoint valida el header `Authorization: Bearer $CRON_SECRET`,
 así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para que funcione.
+
+---
+
+## 📊 Embarques en Google Sheets
+
+La planilla se mantiene sola: una pestaña **Resumen** con todos los embarques y una pestaña por embarque
+con su detalle de ítems y las fotos. Cuando un embarque se marca como **arribado** (entra a depósito),
+su pestaña se oculta sola; queda accesible desde *Ver > Hojas ocultas*.
+
+- **Feed:** `GET /api/sheets/embarques`, valida `Authorization: Bearer $SHEETS_TOKEN`.
+- **Script:** `docs/embarques-google-sheet.gs` — se pega en *Extensiones > Apps Script* de la planilla.
+  Las instrucciones de instalación están en el encabezado del archivo.
+
+El `API_URL` y el `TOKEN` van en *Propiedades del script*, no en el código, para que el token no viaje
+si se comparte la planilla. El refresco es cada 15 minutos (menú **Embarques**); no es instantáneo.
 
 ---
 
