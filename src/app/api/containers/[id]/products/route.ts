@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { isBlobPhoto } from "@/lib/photos";
+import { fotoDeCodigo, recordarFotoDeCodigo } from "@/lib/fotoCodigo";
 import { recalcularPrecioContenedor } from "@/lib/containerTotals";
 import {
   agregarLineas,
@@ -20,6 +21,9 @@ import {
 // la edición (PATCH /api/products/:id): sólo el superadmin (Matías), y los
 // agregados del ítem —unidades, precio del lote, CBM— se derivan de las líneas
 // en vez de llegar cargados desde el cliente.
+//
+// Si no se sube foto, se usa la que ya se haya fijado a mano para ese código en
+// otro embarque (biblioteca de lib/fotoCodigo.ts).
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -54,6 +58,13 @@ export async function POST(
     );
   }
 
+  const codigo = strOrNull(body.codigo);
+  // Sin foto elegida, se hereda la que se haya fijado a mano para ese código en
+  // un embarque anterior (lib/fotoCodigo.ts). Si la persona sí eligió una, esa
+  // manda y pasa a ser la nueva foto guardada del código.
+  const heredada = photo === null ? await fotoDeCodigo(codigo) : null;
+  const fotoFinal = photo ?? heredada;
+
   // La pantalla carga el CBM por unidad; la base guarda el CBM por caja.
   const cbmU = numOrNull(body.cbmPorUnidad);
   const { cbmUnitario, cantidadPorCaja } = cbmCajaDesdeUnidad(cbmU, null);
@@ -74,8 +85,11 @@ export async function POST(
       data: {
         containerId,
         rowIndex: (ultimo._max.rowIndex ?? 0) + 1,
-        photo,
-        codigo: strOrNull(body.codigo),
+        photo: fotoFinal,
+        // Tanto la elegida como la heredada salieron de una decisión manual:
+        // ganan sobre la foto de MercadoLibre.
+        fotoManual: fotoFinal !== null,
+        codigo,
         remark: strOrNull(body.remark),
         cbmUnitario,
         cantidadPorCaja,
@@ -88,6 +102,7 @@ export async function POST(
     });
 
     await recalcularPrecioContenedor(containerId);
+    if (photo) await recordarFotoDeCodigo(codigo, photo, session.user);
     return NextResponse.json(product, { status: 201 });
   } catch {
     return NextResponse.json({ error: "No se pudo agregar el producto." }, { status: 500 });

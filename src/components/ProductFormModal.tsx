@@ -38,6 +38,39 @@ function num(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/**
+ * Pasa una imagen .webp a JPG antes de subirla.
+ *
+ * Las fotos que se bajan de MercadoLibre vienen en .webp y la función =IMAGE()
+ * de Google Sheets no las renderiza: la foto se veía bien en el panel y la celda
+ * de la planilla quedaba vacía. Se convierte en el navegador (que sabe decodificar
+ * webp) sobre fondo blanco, porque el JPG no tiene transparencia. Si algo falla,
+ * se sube el archivo original: es mejor eso que perder la foto.
+ */
+async function aJpgSiEsWebp(file: File): Promise<File> {
+  if (!/webp/i.test(file.type) && !/\.webp$/i.test(file.name)) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const blob = await new Promise<Blob | null>((res) =>
+      canvas.toBlob(res, "image/jpeg", 0.92),
+    );
+    if (!blob) return file;
+    const nombre = file.name.replace(/\.webp$/i, "") + ".jpg";
+    return new File([blob], nombre, { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+}
+
 /** CBM por unidad del producto, que es lo que muestra la tabla. */
 function cbmUnidadActual(product?: ProductRow | null): string {
   if (!product || product.cbmUnitario == null || !product.cantidadPorCaja) return "";
@@ -75,6 +108,7 @@ export default function ProductFormModal({
   const [loading, setLoading] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   function updateLine(i: number, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
@@ -105,10 +139,15 @@ export default function ProductFormModal({
     return { lineas, ag, lc };
   }, [lines, cbmU, origin, freightCost]);
 
-  async function elegirFoto(file: File) {
+  async function elegirFoto(original: File) {
     setSubiendo(true);
     setError(null);
+    setAviso(null);
     try {
+      const file = await aJpgSiEsWebp(original);
+      if (file !== original) {
+        setAviso("Era .webp y se convirtió a JPG: Google Sheets no muestra los .webp.");
+      }
       const blob = await uploadToBlob(
         `producto-${product?.id ?? "nuevo"}-${Date.now()}-${file.name}`,
         file,
@@ -227,9 +266,15 @@ export default function ProductFormModal({
                   </button>
                 )}
               </div>
-              {product?.photo && product.photo !== photo && (
-                <p className="mt-1.5 max-w-[9rem] text-[10px] leading-snug text-amber-300/80">
-                  En la tabla se muestra la foto de MercadoLibre, que tiene prioridad.
+              {photo && (
+                <p className="mt-1.5 max-w-[9rem] text-[10px] leading-snug text-teal-300/70">
+                  Al guardar manda sobre la de MercadoLibre y queda reservada para
+                  los próximos embarques con este código.
+                </p>
+              )}
+              {aviso && (
+                <p className="mt-1.5 max-w-[9rem] text-[10px] leading-snug text-amber-300/90">
+                  {aviso}
                 </p>
               )}
             </div>

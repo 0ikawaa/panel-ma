@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
-import { deleteBlobUrls, isBlobPhoto } from "@/lib/photos";
+import { isBlobPhoto } from "@/lib/photos";
+import {
+  borrarFotosSinUso,
+  olvidarFotoDeCodigo,
+  recordarFotoDeCodigo,
+} from "@/lib/fotoCodigo";
 import { recalcularPrecioContenedor } from "@/lib/containerTotals";
 import {
   agregarLineas,
@@ -21,6 +26,11 @@ import {
 //
 // Se puede editar: foto, código, observaciones, CBM por unidad y el detalle por
 // línea (códigos, unidades, precio de origen y observación de cada una).
+//
+// La foto que se cambia acá queda marcada como manual (`fotoManual`): pasa a
+// tener prioridad sobre la de MercadoLibre en la tabla y en la planilla, y se
+// guarda contra el código en la biblioteca (lib/fotoCodigo.ts) para que los
+// embarques que vengan con ese mismo código ya nazcan con ella.
 //
 // NO se editan a mano el precio del lote ni el costo final. El primero se
 // calcula por línea (unidades × precio) y se suma; el segundo sale de
@@ -79,6 +89,9 @@ export async function PATCH(
         );
       }
       data.photo = nueva;
+      // Puesta por una persona: gana sobre la de MercadoLibre. Al quitarla, el
+      // ítem vuelve a mostrar la de ML (o la del Excel) como antes.
+      data.fotoManual = nueva !== null;
       // La anterior se borra recién si el guardado sale bien.
       if (isBlobPhoto(actual.photo)) fotoAnterior = actual.photo;
     }
@@ -129,10 +142,22 @@ export async function PATCH(
       await recalcularPrecioContenedor(actual.containerId);
     }
 
+    if (data.fotoManual !== undefined) {
+      // La biblioteca sigue a la última decisión manual sobre ese código: si se
+      // puso una foto, se reserva; si se quitó, se olvida (no tendría sentido
+      // que el próximo embarque reviva la que se acaba de sacar).
+      if (product.photo) {
+        await recordarFotoDeCodigo(product.codigo, product.photo, session.user);
+      } else {
+        await olvidarFotoDeCodigo(product.codigo);
+      }
+    }
+
     if (fotoAnterior) {
-      // Si falla el borrado queda un archivo huérfano en Blob y nada más; no
-      // tiene sentido voltear una edición ya guardada por eso.
-      await deleteBlobUrls([fotoAnterior]).catch(() => {});
+      // Sólo si no quedó referenciada por otro ítem ni por la biblioteca: la
+      // misma URL puede estar heredada en varios embarques. Si falla el borrado
+      // queda un archivo huérfano en Blob y nada más.
+      await borrarFotosSinUso([fotoAnterior]);
     }
     return NextResponse.json(product);
   } catch {
@@ -172,9 +197,10 @@ export async function DELETE(
   }
 
   await recalcularPrecioContenedor(actual.containerId);
-  // La foto se borra de Blob recién con la fila ya eliminada; si falla queda un
-  // archivo huérfano y nada más.
-  await deleteBlobUrls([actual.photo]).catch(() => {});
+  // La foto se borra de Blob recién con la fila ya eliminada, y sólo si no la
+  // usa ningún otro ítem ni la biblioteca de códigos; si falla queda un archivo
+  // huérfano y nada más.
+  await borrarFotosSinUso([actual.photo]);
 
   return NextResponse.json({ ok: true });
 }

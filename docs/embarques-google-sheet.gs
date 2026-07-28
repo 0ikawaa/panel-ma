@@ -189,6 +189,19 @@ function limpiarHoja_(hoja) {
   hoja.getRange(1, 1, hoja.getMaxRows(), hoja.getMaxColumns()).breakApart();
 }
 
+/**
+ * Garantiza que la hoja tenga lugar para lo que se va a escribir. Hace falta
+ * porque `limpiarSobrantes_` recorta la hoja a lo justo al terminar: si en la
+ * corrida siguiente hay una columna más (pasó al agregar "Origen") o más
+ * embarques que la vez pasada, escribir fuera de rango tira error.
+ */
+function asegurarTamano_(hoja, filas, columnas) {
+  var faltanC = columnas - hoja.getMaxColumns();
+  if (faltanC > 0) hoja.insertColumnsAfter(hoja.getMaxColumns(), faltanC);
+  var faltanF = filas - hoja.getMaxRows();
+  if (faltanF > 0) hoja.insertRowsAfter(hoja.getMaxRows(), faltanF);
+}
+
 /** Deja la hoja sin sobrantes de una corrida anterior con más filas o columnas. */
 function limpiarSobrantes_(hoja, filasUsadas, columnasUsadas) {
   var maxF = hoja.getMaxRows();
@@ -206,8 +219,10 @@ function escribirResumen_(ss, data) {
 
   // Sin columna de ítems: el Resumen contesta qué viene y cuándo llega, y la
   // cantidad de ítems de cada embarque está en su propia pestaña.
-  var COLS = 4;
-  var anchos = [280, 160, 200, 220];
+  var COLS = 5;
+  var anchos = [120, 280, 160, 200, 220];
+  // 4 filas de cabecera + una por embarque.
+  asegurarTamano_(hoja, data.embarques.length + 5, COLS);
   for (var a = 0; a < anchos.length; a++) hoja.setColumnWidth(a + 1, anchos[a]);
 
   // Encabezado de la planilla.
@@ -229,7 +244,7 @@ function escribirResumen_(ss, data) {
   hoja.setRowHeight(3, 10);
 
   var filaEnc = 4;
-  var titulos = ['Embarque', 'Estado', 'Fecha de llegada', 'Cuánto falta'];
+  var titulos = ['Origen', 'Embarque', 'Estado', 'Fecha de llegada', 'Cuánto falta'];
   hoja.getRange(filaEnc, 1, 1, COLS).setValues([titulos])
     .setFontWeight('bold').setFontColor(AZUL).setBackground(AZUL_CLARO)
     .setVerticalAlignment('middle');
@@ -241,6 +256,8 @@ function escribirResumen_(ss, data) {
     for (var i = 0; i < embarques.length; i++) {
       var e = embarques[i];
       filas.push([
+        // Bandera + país. Lo manda el panel según el origen del embarque.
+        e.origenLabel || '',
         e.nombre,
         e.estadoLabel,
         e.arribado ? formatearFecha_(e.receivedAt) : formatearFechaUTC_(e.eta),
@@ -253,7 +270,8 @@ function escribirResumen_(ss, data) {
     rango.setValues(filas).setVerticalAlignment('middle');
     hoja.setRowHeights(inicio, filas.length, 30);
 
-    hoja.getRange(inicio, 1, filas.length, 1).setFontWeight('bold');
+    hoja.getRange(inicio, 1, filas.length, 1).setHorizontalAlignment('center');
+    hoja.getRange(inicio, 2, filas.length, 1).setFontWeight('bold');
 
     // Bandas y semáforo de llegada, fila por fila.
     for (var j = 0; j < embarques.length; j++) {
@@ -262,12 +280,12 @@ function escribirResumen_(ss, data) {
       if (j % 2 === 1) hoja.getRange(fila, 1, 1, COLS).setBackground(BANDA);
 
       var col = coloresLlegada_(emb);
-      hoja.getRange(fila, 3, 1, 2)
+      hoja.getRange(fila, 4, 1, 2)
         .setBackground(col.bg).setFontColor(col.fg).setFontWeight('bold')
         .setHorizontalAlignment('center');
 
       if (emb.arribado) {
-        hoja.getRange(fila, 1, 1, 2).setFontColor(GRIS_TEXTO).setFontStyle('italic');
+        hoja.getRange(fila, 1, 1, 3).setFontColor(GRIS_TEXTO).setFontStyle('italic');
       }
     }
 
@@ -294,6 +312,8 @@ function escribirEmbarque_(ss, emb) {
   limpiarHoja_(hoja);
   hoja.setHiddenGridlines(true);
   var COLS = COLUMNAS.length;
+  // 6 filas de cabecera (5 sin notas) + una por ítem.
+  asegurarTamano_(hoja, emb.items.length + 7, COLS);
   for (var w = 0; w < COLS; w++) hoja.setColumnWidth(w + 1, COLUMNAS[w].ancho);
 
   // 1 · Nombre del embarque.

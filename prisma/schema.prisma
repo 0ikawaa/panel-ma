@@ -62,6 +62,10 @@ model Product {
   container       Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
   rowIndex        Int // Orden de aparición en el Excel
   photo           String? // Foto en base64 (data URL) extraída de la celda
+  /// true cuando la foto la puso una persona desde el panel (no salió del
+  /// Excel). Una foto manual le gana a la de MercadoLibre en la tabla y en la
+  /// planilla: si alguien se tomó el trabajo de corregirla, esa es la buena.
+  fotoManual      Boolean   @default(false)
   codigo          String? // Código a mostrar (base cuando hay varios)
   precioChina     Float? // Precio unitario FOB (USD), representativo
   cantidadPorCaja Int? // Unidades por caja (QTY/CTN) de la primera línea
@@ -137,6 +141,17 @@ model ReportConfig {
 /// Origen de un producto por código padre (base, sin variante). Se usa para
 /// decidir cuántos meses de cobertura pedir (China = 4, Brasil = 1). Solo se
 /// guardan los de Brasil; lo que no está listado se asume de China.
+/// Foto elegida a mano para un código, para reusarla en los embarques que
+/// vengan. Cuando alguien corrige la foto de un ítem en un embarque se guarda
+/// acá con su código base ("48108-BEI-39" -> "48108"), y todo ítem futuro con
+/// ese código nace con esa foto en vez de la que traiga el Excel.
+model CodigoFoto {
+  codigo    String   @id // código base normalizado (mayúsculas)
+  url       String // foto en Vercel Blob
+  updatedBy String? // usuario que la fijó por última vez
+  updatedAt DateTime @updatedAt
+}
+
 model ProductOrigin {
   codigo    String   @id // código padre / base, ej. "16000"
   origin    String   @default("brasil") // por ahora siempre "brasil"

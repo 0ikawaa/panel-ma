@@ -15,6 +15,7 @@
 
 import { estadoEfectivo, estadoLabel, type Estado } from "./embarques";
 import { hoyUy } from "./fecha";
+import { renderizableEnSheets } from "./fotoProducto";
 
 /** Nombre de la pestaña de resumen. Queda reservado: ningún embarque puede usarlo. */
 export const PESTANA_RESUMEN = "Resumen";
@@ -44,8 +45,22 @@ export interface ContainerInput {
   notes: string | null;
   status: string | null;
   receivedAt: Date | string | null;
+  /** "china" | "brasil". Cualquier otra cosa se toma como China. */
+  origin?: string | null;
   products: ProductoInput[];
 }
+
+export type Origen = "china" | "brasil";
+
+/**
+ * Origen con su bandera, para la columna "Origen" del resumen. El emoji sale
+ * bien en el celular y en Mac; en Chrome sobre Windows las banderas se ven como
+ * las dos letras del país ("BR"), que igual se entiende.
+ */
+export const ORIGEN_LABEL: Record<Origen, string> = {
+  china: "🇨🇳 China",
+  brasil: "🇧🇷 Brasil",
+};
 
 // ---------- Salida (lo que consume el Apps Script) ----------
 
@@ -64,7 +79,11 @@ export interface TotalesSheet {
 export interface EmbarqueSheet {
   id: string;
   pestana: string;
+  /** Nombre del embarque; los de Brasil llevan " - BR" al final. */
   nombre: string;
+  origen: Origen;
+  /** Origen con bandera, ej. "🇧🇷 Brasil". */
+  origenLabel: string;
   estado: Estado;
   estadoLabel: string;
   eta: string | null;
@@ -122,6 +141,27 @@ export function nombrePestanaUnico(nombre: string, tomados: Set<string>): string
   return base;
 }
 
+/** Origen del embarque, tolerando mayúsculas o un valor viejo/vacío. */
+export function origenDe(origin: string | null | undefined): Origen {
+  return String(origin ?? "").trim().toLowerCase() === "brasil" ? "brasil" : "china";
+}
+
+/**
+ * Nombre del embarque para la planilla. Los de Brasil se marcan con " - BR" al
+ * final: en la pestaña —que es lo único que se ve al recorrer la hoja— no hay
+ * columna de origen que lo aclare. Si el nombre ya lo trae escrito a mano no se
+ * repite.
+ */
+export function nombreParaPlanilla(
+  nombre: string,
+  origin: string | null | undefined,
+): string {
+  const base = nombre.trim();
+  if (origenDe(origin) !== "brasil") return base;
+  if (/[-(\s]\s*br\s*\)?$/i.test(base)) return base;
+  return `${base} - BR`;
+}
+
 function iso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
   const d = v instanceof Date ? v : new Date(v);
@@ -148,9 +188,12 @@ export function diasHasta(
   return Math.round((diaUtc(d) - hoyUy(hoy).getTime()) / MS_POR_DIA);
 }
 
-/** Solo mandamos fotos servidas por http(s); un data URL base64 no lo renderiza =IMAGE(). */
+/**
+ * Solo mandamos fotos que =IMAGE() sepa mostrar: servidas por http(s) —un data
+ * URL base64 no lo renderiza— y en un formato soportado (el .webp no lo es).
+ */
 function fotoUsable(photo: string | null): string {
-  return photo && /^https?:\/\//i.test(photo) ? photo : "";
+  return renderizableEnSheets(photo) ? (photo as string) : "";
 }
 
 // ---------- Armado ----------
@@ -205,10 +248,14 @@ export function buildSheetPayload(
     const estado = estadoEfectivo(c);
     const items = armarItems(c);
     const arribado = estado === "deposito";
+    const origen = origenDe(c.origin);
+    const nombre = nombreParaPlanilla(c.name, c.origin);
     return {
       id: c.id,
-      pestana: nombrePestanaUnico(c.name, tomados),
-      nombre: c.name,
+      pestana: nombrePestanaUnico(nombre, tomados),
+      nombre,
+      origen,
+      origenLabel: ORIGEN_LABEL[origen],
       estado,
       estadoLabel: estadoLabel(estado),
       eta: iso(c.eta),

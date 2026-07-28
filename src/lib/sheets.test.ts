@@ -3,7 +3,9 @@ import {
   PESTANA_RESUMEN,
   buildSheetPayload,
   diasHasta,
+  nombreParaPlanilla,
   nombrePestanaUnico,
+  origenDe,
   sanitizarNombrePestana,
   type ContainerInput,
   type ProductoInput,
@@ -62,6 +64,33 @@ describe("nombrePestanaUnico", () => {
   it("no pisa la pestaña de resumen", () => {
     const tomados = new Set<string>([PESTANA_RESUMEN]);
     expect(nombrePestanaUnico(PESTANA_RESUMEN, tomados)).toBe(`${PESTANA_RESUMEN} (2)`);
+  });
+});
+
+describe("origenDe", () => {
+  it("solo 'brasil' es Brasil; lo demás (incluso vacío) es China", () => {
+    expect(origenDe("brasil")).toBe("brasil");
+    expect(origenDe(" BRASIL ")).toBe("brasil");
+    expect(origenDe("china")).toBe("china");
+    expect(origenDe(null)).toBe("china");
+    expect(origenDe(undefined)).toBe("china");
+  });
+});
+
+describe("nombreParaPlanilla", () => {
+  it("marca los de Brasil con - BR", () => {
+    expect(nombreParaPlanilla("Trevisul 1993", "brasil")).toBe("Trevisul 1993 - BR");
+  });
+
+  it("no toca los de China", () => {
+    expect(nombreParaPlanilla("Contenedor 32", "china")).toBe("Contenedor 32");
+    expect(nombreParaPlanilla("Contenedor 32", null)).toBe("Contenedor 32");
+  });
+
+  it("no repite la marca si el nombre ya la trae", () => {
+    expect(nombreParaPlanilla("Trevisul - BR", "brasil")).toBe("Trevisul - BR");
+    expect(nombreParaPlanilla("Trevisul (BR)", "brasil")).toBe("Trevisul (BR)");
+    expect(nombreParaPlanilla("Trevisul br", "brasil")).toBe("Trevisul br");
   });
 });
 
@@ -199,6 +228,40 @@ describe("buildSheetPayload", () => {
     ).embarques;
     expect(e.items[0].foto).toBe("");
     expect(e.items[1].foto).toBe("https://x.public.blob.vercel-storage.com/a.png");
+  });
+
+  it("no manda fotos .webp: =IMAGE() no las renderiza", () => {
+    const [e] = buildSheetPayload(
+      [
+        contenedor({
+          products: [
+            producto({ photo: "https://x.public.blob.vercel-storage.com/a.webp" }),
+            producto({ photo: "https://http2.mlstatic.com/D_NQ_NP_1-O.jpg" }),
+          ],
+        }),
+      ],
+      HOY,
+    ).embarques;
+    expect(e.items[0].foto).toBe("");
+    expect(e.items[1].foto).toBe("https://http2.mlstatic.com/D_NQ_NP_1-O.jpg");
+  });
+
+  it("marca el origen y le agrega - BR al nombre y a la pestaña de los de Brasil", () => {
+    const p = buildSheetPayload(
+      [
+        contenedor({ id: "br", name: "Trevisul 1993", origin: "brasil" }),
+        contenedor({ id: "cn", name: "Contenedor 32", origin: "china" }),
+      ],
+      HOY,
+    );
+    const porId = Object.fromEntries(p.embarques.map((e) => [e.id, e]));
+    expect(porId.br.origen).toBe("brasil");
+    expect(porId.br.origenLabel).toContain("Brasil");
+    expect(porId.br.nombre).toBe("Trevisul 1993 - BR");
+    expect(porId.br.pestana).toBe("Trevisul 1993 - BR");
+    expect(porId.cn.origen).toBe("china");
+    expect(porId.cn.origenLabel).toContain("China");
+    expect(porId.cn.nombre).toBe("Contenedor 32");
   });
 
   it("asigna una pestaña única por embarque", () => {

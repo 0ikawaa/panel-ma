@@ -113,9 +113,14 @@ así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para
 
 ## 📊 Embarques en Google Sheets
 
-La planilla se mantiene sola: una pestaña **Resumen** con todos los embarques y una pestaña por embarque
-con su detalle (foto, código, cantidad y observaciones). Cuando un embarque se marca como **arribado**
-(entra a depósito), su pestaña se oculta sola; queda accesible desde *Ver > Hojas ocultas*.
+La planilla se mantiene sola: una pestaña **Resumen** con todos los embarques (con su **Origen**: 🇨🇳 China
+o 🇧🇷 Brasil) y una pestaña por embarque con su detalle (foto, código, cantidad y observaciones). Los
+embarques de Brasil llevan **“ - BR”** al final del nombre, porque en la pestaña no hay columna que lo
+aclare. Cuando un embarque se marca como **arribado** (entra a depósito), su pestaña se oculta sola; queda
+accesible desde *Ver > Hojas ocultas*.
+
+La foto que se manda es la misma que muestra la tabla del panel: **la puesta a mano > la de MercadoLibre
+(por código) > la del Excel**. Las `.webp` no viajan: `=IMAGE()` de Sheets no las renderiza.
 
 > **El feed no expone datos comerciales.** Ni precios FOB, ni montos, ni CBM, ni flete, ni costo
 > nacionalizado: la route ni siquiera los trae de la base. La planilla se comparte con gente que sólo
@@ -125,7 +130,8 @@ con su detalle (foto, código, cantidad y observaciones). Cuando un embarque se 
 
 - **Feed:** `GET /api/sheets/embarques`, valida `Authorization: Bearer $SHEETS_TOKEN`.
 - **Script:** `docs/embarques-google-sheet.gs` — se pega en *Extensiones > Apps Script* de la planilla.
-  Las instrucciones de instalación están en el encabezado del archivo.
+  Las instrucciones de instalación están en el encabezado del archivo. Si el script cambia (por ejemplo,
+  al agregarse la columna Origen), hay que volver a pegarlo: el panel solo manda los datos.
 
 El `API_URL` y el `TOKEN` van en *Propiedades del script*, no en el código, para que el token no viaje
 si se comparte la planilla. El refresco es cada 15 minutos (menú **Embarques**); no es instantáneo.
@@ -174,6 +180,11 @@ Cantidad por caja · CBM unitario · CBM total** (los nombres no tienen que ser 
 Las **fotos** deben estar incrustadas en la columna Foto — soporta imágenes ancladas de Excel y el formato
 **DISPIMG** de WPS (habitual en proveedores chinos). Si falta el CBM total pero está el unitario y la
 cantidad, se calcula solo. Subir un Excel nuevo **reemplaza** los productos de ese contenedor.
+
+**Fotos corregidas a mano.** Cuando alguien cambia la foto de un ítem desde el panel, esa foto queda
+guardada contra su código (tabla `CodigoFoto`, clave = código base: `48108-BEI-39` → `48108`). Todo
+embarque futuro con ese código —venga del Excel o cargado a mano— nace con ella en lugar de la que traiga
+el proveedor, y manda también sobre la de MercadoLibre. Si la foto se quita a mano, el código se olvida.
 
 ---
 

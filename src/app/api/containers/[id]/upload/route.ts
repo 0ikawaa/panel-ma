@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { parseExcel } from "@/lib/excel";
 import { buildPreviewReport, validateParse } from "@/lib/validateParse";
 import { uploadDataUrlPhotos, deleteBlobPhotos } from "@/lib/photos";
+import { borrarFotosSinUso, claveCodigo, fotosDeCodigos } from "@/lib/fotoCodigo";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -132,10 +133,20 @@ export async function POST(
     })
   ).map((p) => p.photo);
 
-  // Subir las fotos nuevas a Blob y reemplazar el data URL por su URL pública.
+  // Fotos fijadas a mano en embarques anteriores para estos códigos. Le ganan a
+  // la del Excel: si alguien ya corrigió la foto de ese código, esa es la buena
+  // y no hay por qué volver a corregirla embarque tras embarque.
+  const guardadas = await fotosDeCodigos(result.items.map((it) => it.codigo));
+  const heredada = (codigo: string | null) => {
+    const clave = claveCodigo(codigo);
+    return clave ? guardadas.get(clave) ?? null : null;
+  };
+
+  // Subir a Blob las fotos nuevas del Excel y reemplazar el data URL por su URL
+  // pública. Las de los ítems que heredan foto no se suben: no se usarían.
   // Si no hay token de Blob (dev local), el mapa viene vacío y se conserva el base64.
   const photoMap = await uploadDataUrlPhotos(
-    result.items.map((it) => it.photo),
+    result.items.filter((it) => !heredada(it.codigo)).map((it) => it.photo),
     `containers/${id}`,
   );
   const newBlobUrls = Array.from(photoMap.values());
@@ -144,21 +155,25 @@ export async function POST(
     await prisma.$transaction([
       prisma.product.deleteMany({ where: { containerId: id } }),
       prisma.product.createMany({
-        data: result.items.map((it) => ({
-          containerId: id,
-          rowIndex: it.rowIndex,
-          photo: it.photo ? photoMap.get(it.photo) ?? it.photo : null,
-          codigo: it.codigo,
-          precioChina: it.precioChina,
-          cantidadPorCaja: it.cantidadPorCaja,
-          unidades: it.unidades,
-          montoTotal: it.montoTotal,
-          unidad: it.unidad,
-          remark: it.remark,
-          cbmUnitario: it.cbmUnitario,
-          cbmTotal: it.cbmTotal,
-          detalle: it.detalle as unknown as Prisma.InputJsonValue,
-        })),
+        data: result.items.map((it) => {
+          const propia = heredada(it.codigo);
+          return {
+            containerId: id,
+            rowIndex: it.rowIndex,
+            photo: propia ?? (it.photo ? photoMap.get(it.photo) ?? it.photo : null),
+            fotoManual: propia !== null,
+            codigo: it.codigo,
+            precioChina: it.precioChina,
+            cantidadPorCaja: it.cantidadPorCaja,
+            unidades: it.unidades,
+            montoTotal: it.montoTotal,
+            unidad: it.unidad,
+            remark: it.remark,
+            cbmUnitario: it.cbmUnitario,
+            cbmTotal: it.cbmTotal,
+            detalle: it.detalle as unknown as Prisma.InputJsonValue,
+          };
+        }),
       }),
       prisma.container.update({
         where: { id },
@@ -175,9 +190,11 @@ export async function POST(
     );
   }
 
-  // Guardado OK: borrar el Excel temporal y las fotos del Excel anterior.
+  // Guardado OK: borrar el Excel temporal y las fotos del Excel anterior que no
+  // queden en uso (una foto heredada de la biblioteca la comparten varios
+  // embarques: borrarla dejaría rota la de los demás).
   del(blobUrl).catch(() => {});
-  await deleteBlobPhotos(oldPhotos);
+  await borrarFotosSinUso(oldPhotos);
 
   return NextResponse.json({
     ok: true,

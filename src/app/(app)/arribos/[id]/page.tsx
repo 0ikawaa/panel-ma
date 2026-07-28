@@ -5,7 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
 import { fmtFecha } from "@/lib/fecha";
-import { mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
+import { mlPhotoMap } from "@/lib/mundoshop";
+import { fotoMostrada, mapasVacios } from "@/lib/fotoProducto";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
 import AddProductButton from "@/components/AddProductButton";
@@ -44,13 +45,13 @@ export default async function ContainerDetailPage({
   const cbmTotal = products.reduce((a, p) => a + (p.cbmTotal ?? 0), 0);
   const unidades = products.reduce((a, p) => a + (p.unidades ?? 0), 0);
 
-  // Foto de MercadoLibre por código; si no hay, se usa la del Excel (p.photo).
-  const mlPhotos = await mlPhotoMap().catch(() => ({ bySku: new Map<string, string>(), byBase: new Map<string, string>() }));
+  // Foto manual > MercadoLibre (por código) > la del Excel. Ver lib/fotoProducto.ts.
+  const mlPhotos = await mlPhotoMap().catch(mapasVacios);
 
   const rows = products.map((p) => ({
     id: p.id,
     rowIndex: p.rowIndex,
-    photo: resolveMlPhoto(mlPhotos, p.codigo) ?? p.photo,
+    photo: fotoMostrada(p, mlPhotos),
     // La foto que se muestra puede venir de ML; la editable es siempre la que
     // está guardada en el producto. Si se mezclan, editar termina pisando la
     // foto propia con la URL de MercadoLibre.

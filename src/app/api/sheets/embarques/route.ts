@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildSheetPayload } from "@/lib/sheets";
+import { mlPhotoMap } from "@/lib/mundoshop";
+import { fotoParaSheets, mapasVacios } from "@/lib/fotoProducto";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 30;
+// Armar el mapa de fotos de MercadoLibre puede tardar en un arranque en frío
+// (después queda cacheado 20 minutos en memoria).
+export const maxDuration = 60;
 
 // GET /api/sheets/embarques
 // Feed que consume el Apps Script de la planilla de Google Sheets.
@@ -33,13 +37,32 @@ export async function GET(req: Request) {
         notes: true,
         status: true,
         receivedAt: true,
+        origin: true,
         products: {
           orderBy: { rowIndex: "asc" },
-          select: { codigo: true, photo: true, unidades: true, remark: true },
+          select: {
+            codigo: true,
+            photo: true,
+            fotoManual: true,
+            unidades: true,
+            remark: true,
+          },
         },
       },
     });
-    return NextResponse.json(buildSheetPayload(containers), {
+
+    // La planilla tiene que mostrar la MISMA foto que la tabla del panel: foto
+    // manual > MercadoLibre (por código) > la del Excel, salteando las que
+    // =IMAGE() no renderiza. Antes mandaba sólo la guardada, así que los ítems
+    // que en pantalla se ven con la foto de ML salían con la celda vacía. Si el
+    // mapa de ML falla, se sigue con la propia.
+    const ml = await mlPhotoMap(12000).catch(mapasVacios);
+    const conFotos = containers.map((c) => ({
+      ...c,
+      products: c.products.map((p) => ({ ...p, photo: fotoParaSheets(p, ml) })),
+    }));
+
+    return NextResponse.json(buildSheetPayload(conFotos), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (e) {
