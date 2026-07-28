@@ -23,12 +23,17 @@ export default function ReportePublicaciones() {
   const [savingCfg, setSavingCfg] = useState(false);
   const [showCfg, setShowCfg] = useState(false);
 
-  const load = useCallback(async () => {
+  // Al abrir la pantalla vale el reporte cacheado (es instantáneo); apretar
+  // «Actualizar» pide explícitamente que se rehaga con los datos de ahora.
+  const load = useCallback(async (forzar = false) => {
     setLoading(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch("/api/reportes/publicaciones", { cache: "no-store", signal: AbortSignal.timeout(60000) });
+      const url = forzar
+        ? "/api/reportes/publicaciones?forzar=1"
+        : "/api/reportes/publicaciones";
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(60000) });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
       setReport(j.report);
@@ -84,7 +89,7 @@ export default function ReportePublicaciones() {
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
-            onClick={load}
+            onClick={() => void load(true)}
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 disabled:opacity-60"
           >
