@@ -34,7 +34,11 @@ La app es **PWA** (se puede instalar como app en iOS/Android).
   header `x-api-key`. **Nunca se expone al navegador**: siempre se llama desde el servidor.
 
 Modelos Prisma: `Container`, `ContainerDoc`, `Product`, `Reposicion`, `CostOverride`, `User`,
-`Profile`, `ReportConfig`, `ReportRun`, `ProductOrigin`, `VentaHistorica`.
+`Profile`, `LoginAttempt`, `ReportConfig`, `ReportRun`, `CodigoFoto`, `ProductOrigin`,
+`VentaHistorica`.
+
+Las **fotos de los productos** no se guardan en la base: van a **Vercel Blob** y en
+`Product.photo` queda sólo la URL (ver `src/lib/photos.ts`).
 
 ---
 
@@ -52,10 +56,10 @@ Modelos Prisma: `Container`, `ContainerDoc`, `Product`, `Reposicion`, `CostOverr
    cp .env.example .env
    ```
 
-3. Creá/actualizá las tablas en la base (solo la primera vez o al cambiar el schema):
+3. Aplicá las migraciones en la base (solo la primera vez o al traer cambios de schema):
 
    ```bash
-   npx prisma db push
+   npx prisma migrate deploy
    ```
 
 4. Arrancá la plataforma:
@@ -71,11 +75,28 @@ Otros comandos:
 ```bash
 npm test        # corre los tests (Vitest)
 npm run lint    # ESLint
-npm run build   # build de producción (corre prisma generate + prisma db push + next build)
+npm run build   # build de producción (corre prisma generate + prisma migrate deploy + next build)
 ```
 
 > La base es **Postgres**. En local podés apuntar `DATABASE_URL` a un Neon de desarrollo o a un
-> Postgres local. El esquema se gestiona con `prisma db push` (no hay carpeta de migraciones).
+> Postgres local.
+
+### Cambiar el schema
+
+El esquema se gestiona con **migraciones versionadas** (`prisma/migrations/`), no con `db push`.
+Cuando toques `prisma/schema.prisma`:
+
+```bash
+npx prisma migrate dev --name lo-que-cambiaste
+```
+
+Eso genera el `.sql` de la migración, lo aplica en tu base y regenera el cliente. **El `.sql` se
+commitea junto con el cambio de schema**: es el que corre en producción durante el deploy.
+
+> **Por qué no `db push`.** Antes el build corría `prisma db push --accept-data-loss` contra la base
+> de producción en cada deploy. Con cambios aditivos no pasaba nada, pero un rename de columna se
+> traduce en borrar la vieja y crear la nueva vacía — sin aviso, sin registro y sin vuelta atrás.
+> Con migraciones el SQL se revisa en el PR antes de tocar la base.
 
 ---
 
@@ -142,8 +163,9 @@ si se comparte la planilla. El refresco es cada 15 minutos (menú **Embarques**)
 
 1. El repo está conectado a Vercel: **cada push a `main` dispara un deploy** de producción.
 2. Cargar las variables de entorno (las de la tabla de arriba) en *Settings → Environment Variables*.
-3. El `build` corre `prisma generate && prisma db push`, así que los cambios de schema se aplican
-   automáticamente contra la base de producción en cada deploy.
+3. El `build` corre `prisma generate && prisma migrate deploy`: aplica las migraciones pendientes
+   que vengan commiteadas en `prisma/migrations/`. Si una falla, el deploy se corta y la base queda
+   como estaba.
 
 ---
 
@@ -173,6 +195,26 @@ Convención: la **lógica pura** vive en `*.ts` (testeable con Vitest) y lo que 
 
 ---
 
+## ⚡ Rendimiento
+
+Tres cosas que conviene no deshacer sin querer:
+
+- **Los reportes en vivo de ML se cachean 15 minutos** (`src/lib/cache.ts`). Armar el de Calidad
+  son cientos de llamadas a MercadoLibre —el detalle de cada publicación— y más de un minuto de
+  espera. Al abrir la pantalla se muestra lo cacheado; el botón **Actualizar** manda `?forzar=1`
+  y lo rehace con los datos del momento. El cache vive en la memoria de la instancia: no es
+  compartido ni sobrevive a un deploy, es un amortiguador.
+- **Las fotos van por `next/image`**, no por `<img>`. Las del Excel se guardan tal cual las manda
+  el proveedor (400 KB de promedio, alguna de 3 MB) y en pantalla se ven a 40 píxeles: sin
+  optimizar, abrir un embarque de 50 ítems se baja ~20 MB. Los hosts permitidos están en
+  `next.config.ts`; si aparece uno nuevo hay que sumarlo ahí **y** en `src/lib/fotoOptimizable.ts`.
+  El lightbox es la excepción a propósito: ahí se quiere la foto en tamaño real.
+- **`npm run lint` tiene que pasar limpio.** Las reglas de React que trae Next 16 avisan de cosas
+  que cuestan renders de verdad: componentes definidos adentro de otro componente (se remontan en
+  cada render) y dependencias de `useMemo` que se recrean solas (memoizan nada).
+
+---
+
 ## 📄 Formato del Excel de contenedores
 
 La primera hoja debe tener una fila de encabezados con columnas como **Foto · Código · Precio China (FOB) ·
@@ -186,13 +228,35 @@ guardada contra su código (tabla `CodigoFoto`, clave = código base: `48108-BEI
 embarque futuro con ese código —venga del Excel o cargado a mano— nace con ella en lugar de la que traiga
 el proveedor, y manda también sobre la de MercadoLibre. Si la foto se quita a mano, el código se olvida.
 
+**La prioridad es una sola para toda la app**: manual > MercadoLibre > Excel, y vive en
+`src/lib/fotoProducto.ts`. La usan la tabla de Embarques, la planilla de Google Sheets y —desde que
+se unificó— también Órdenes ML, Rentabilidad y Reposición, que antes armaban su propio criterio
+(ML > Excel) e ignoraban las fotos corregidas a mano.
+
 ---
 
 ## 🔒 Acceso y usuarios
 
 - El **superadmin** entra con `ADMIN_USER`/`ADMIN_PASSWORD` y ve todos los módulos.
+  **Si esas dos variables no están cargadas, el superadmin no existe** (antes caía a
+  `admin`/`admin`, así que un deploy sin variables dejaba el panel abierto).
 - Los demás usuarios se crean desde **Administración**, con los módulos que cada uno puede ver.
 - La sesión es una cookie firmada (JWT con `jose`); el `middleware.ts` valida sesión y permisos por ruta.
+
+### Freno a la fuerza bruta
+
+El login cuenta los intentos fallidos en la tabla `LoginAttempt` y bloquea de a poco:
+los primeros 5 no cuestan nada y de ahí en más la espera sube 1 → 2 → 5 → 15 → 30 minutos
+(ver `src/lib/loginThrottle.ts`). Si pasa una hora sin fallos, el contador se olvida.
+
+Se cuentan dos claves a la vez: **usuario + IP** (quien insiste con un usuario desde un lugar)
+e **IP sola**, con un umbral más flojo de 15 (quien prueba usuarios distintos desde el mismo
+lugar; una oficina entera comparte una IP). La clave de usuario lleva la IP adentro para que
+nadie pueda dejar afuera a una persona real fallándole el login a propósito.
+
+> Va en la base y no en memoria porque en Vercel cada instancia tiene su propia memoria: un
+> contador en RAM se saltea con reintentar hasta caer en otra. Si la base no contesta, el login
+> sigue funcionando sin freno — preferimos eso a que un problema de red deje a todos afuera.
 
 ---
 
