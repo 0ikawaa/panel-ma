@@ -67,7 +67,11 @@ export default function ReporteCancelaciones() {
   }, []);
 
   useEffect(() => {
-    load(gran);
+    // Fuera del render: `load` prende el "cargando" apenas se lo llama y
+    // hacerlo sincrónicamente dentro del efecto encadena un render de más.
+    void (async () => {
+      await load(gran);
+    })();
   }, [gran, load]);
 
   const verDetalle = useCallback(async (p: CancelPeriodo) => {

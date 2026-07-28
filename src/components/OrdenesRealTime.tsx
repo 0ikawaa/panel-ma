@@ -2,64 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fmtPeso, fmtPesoSigned } from "@/lib/format";
+import { csvCell } from "@/lib/csv";
+import {
+  fmtDiaCortoMl as fmtDiaCorto,
+  fmtHoraMl as fmtHora,
+  hoyInput as todayStr,
+} from "@/lib/fechaVentas";
+import type { ApiItem, ApiOrder, ApiResp } from "@/lib/tiposOrdenes";
 import ProductThumb from "./ProductThumb";
-
-// ---------- Tipos (coinciden con /api/ventas-ml) ----------
-type ApiItem = {
-  itemId: string;
-  sku: string;
-  title: string;
-  qty: number;
-  unitPrice: number;
-  baseCost: number | null; // costo final: override de la API (tal cual) u Odoo×IVA
-  overrideCost: number | null; // override manual local
-  photo: string | null; // foto ML (o del Excel de Importaciones como fallback)
-};
-type ApiOrder = {
-  orderId: string;
-  packId: string | null;
-  date: string;
-  status: string;
-  venta: number;
-  comision: number;
-  logisticType: string | null;
-  shipCost: number | null;
-  shipSave: number | null;
-  envio: number;
-  items: ApiItem[];
-};
-type ApiResp = { orders: ApiOrder[]; count: number; truncated: boolean; syncedAt: string };
-
-// ---------- Helpers ----------
-function todayStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
-// Los timestamps de ML vienen con offset -04:00. El DÍA se muestra tal cual lo
-// manda ML (mismo criterio que el filtro por fecha, igual que el sistema de
-// referencia). La HORA se convierte a zona Uruguay (America/Montevideo, -03:00),
-// que es la hora real local (ej. 08:56 -04:00 → 09:56 Uruguay).
-const TZ = "America/Montevideo";
-function fmtDiaCorto(iso: string): string {
-  if (!iso || iso.length < 10) return "";
-  return `${+iso.slice(8, 10)}/${+iso.slice(5, 7)}`;
-}
-function fmtHora(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString("es-UY", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: true });
-}
-function fmtFechaLarga(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const dia = `${+iso.slice(8, 10)}/${+iso.slice(5, 7)}/${iso.slice(0, 4)}`;
-  const hora = d.toLocaleTimeString("es-UY", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-  return `${dia}, ${hora}`;
-}
-function csvCell(v: string | number): string {
-  return `"${String(v).replace(/"/g, '""')}"`;
-}
+import TipoBadges from "./TipoBadges";
+import EditarCostoModal, { type CostoEnEdicion } from "./EditarCostoModal";
+import OrdenDetallePanel from "./OrdenDetallePanel";
 
 type SortKey = "fecha" | "venta" | "costo" | "margen" | "pct";
 
@@ -89,7 +42,7 @@ export default function OrdenesRealTime() {
   const [detail, setDetail] = useState<ApiOrder | null>(null);
 
   // Modal de edición de costo
-  const [edit, setEdit] = useState<{ sku: string; title: string; current: number | null } | null>(null);
+  const [edit, setEdit] = useState<CostoEnEdicion | null>(null);
   const [editValue, setEditValue] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -128,12 +81,21 @@ export default function OrdenesRealTime() {
 
   // Carga inicial y al cambiar el rango de fechas.
   useEffect(() => {
-    fetchData();
+    // Fuera del render: `fetchData` prende el "cargando" apenas se lo llama y
+    // hacerlo sincrónicamente dentro del efecto encadena un render de más.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   // Auto-refresh cada 60s (la API de ML se sincroniza cada ~2 min).
+  // El ref guarda siempre el último `fetchData` para que el intervalo no se
+  // recree con cada cambio de fechas; se actualiza en un efecto y no durante el
+  // render, que es lectura/escritura de refs fuera de lugar.
   const fetchRef = useRef(fetchData);
-  fetchRef.current = fetchData;
+  useEffect(() => {
+    fetchRef.current = fetchData;
+  }, [fetchData]);
   useEffect(() => {
     if (!auto) return;
     const id = setInterval(() => fetchRef.current(), 60000);
@@ -182,7 +144,10 @@ export default function OrdenesRealTime() {
     [effCost, publiPct],
   );
 
-  const orders = data?.orders ?? [];
+  // Con `data?.orders ?? []` suelto, el array era nuevo en cada render y los
+  // useMemo que dependen de él no memoizaban nada: se refiltraba y reordenaba
+  // la tabla entera cada vez que se tipeaba una letra en el buscador.
+  const orders = useMemo(() => data?.orders ?? [], [data]);
 
   // Filtrado.
   const filtered = useMemo(() => {
@@ -796,158 +761,27 @@ export default function OrdenesRealTime() {
       )}
 
       {/* ---------- Panel lateral: detalle de la orden ---------- */}
-      {detail && (() => {
-        const m = metrics(detail);
-        const plataforma = m.comision + m.publi;
-        const margenProd = m.venta - m.costo;
-        const util = Math.max(0, m.margen);
-        const totalSeg = m.costo + plataforma + util || 1;
-        const wCosto = (m.costo / totalSeg) * 100;
-        const wPlat = (plataforma / totalSeg) * 100;
-        const wUtil = (util / totalSeg) * 100;
-        const pctOf = (v: number) => (m.venta ? Math.round((v / m.venta) * 100) : 0);
-        const mlUrl = `https://www.mercadolibre.com.uy/ventas/${detail.orderId}/detalle`;
-        return (
-          <div className="fixed inset-0 z-40 flex items-end justify-center sm:items-stretch sm:justify-end">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDetail(null)} />
-            <div className="animate-in relative max-h-[90vh] w-full overflow-y-auto rounded-t-2xl border-t border-white/10 bg-[#131319] shadow-2xl sm:h-full sm:max-h-none sm:max-w-[420px] sm:rounded-none sm:border-l sm:border-t-0">
-              <div className="sticky top-0 z-10 border-b border-white/10 bg-[#131319]/95 backdrop-blur">
-                <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/20 sm:hidden" />
-                <div className="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4">
-                  <h2 className="text-lg font-bold text-white">Detalle</h2>
-                  <button onClick={() => setDetail(null)} className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white" aria-label="Cerrar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-5 w-5"><path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" /></svg>
-                  </button>
-                </div>
-              </div>
+      {detail && (
+        <OrdenDetallePanel
+          detail={detail}
+          metrics={metrics}
+          effCost={effCost}
+          publiPct={publiPct}
+          onClose={() => setDetail(null)}
+          onEditCost={openEdit}
+        />
+      )}
 
-              <div className="space-y-6 px-4 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:px-5">
-                {/* PRODUCTO */}
-                <Section label="Producto">
-                  {detail.items.map((it, i) => (
-                    <div key={it.itemId || i} className="mb-1.5 flex items-start gap-3">
-                      <ProductThumb src={it.photo} alt={it.sku} size={52} />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold leading-snug text-zinc-100">{it.title || "—"}</div>
-                        <div className="mt-0.5 text-xs text-zinc-500">
-                          {it.sku || "sin SKU"}{it.qty > 1 ? ` · ${it.qty} u.` : ""}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                    <span>Orden #{detail.orderId}</span>
-                    <a href={mlUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-teal-300 hover:text-teal-200">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3.5 w-3.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      Ver venta en ML
-                    </a>
-                  </div>
-                </Section>
-
-                {/* VENTA */}
-                <Section label="Venta">
-                  <DetailRow label="Precio" value={fmtPeso(m.venta)} strong />
-                  <DetailRow label="Fecha" value={fmtFechaLarga(detail.date)} />
-                </Section>
-
-                {/* COSTO PRODUCTO */}
-                <Section label="Costo producto">
-                  {detail.items.map((it, i) => {
-                    const c = effCost(it);
-                    return (
-                      <div key={it.itemId || i} className="flex items-center justify-between py-0.5">
-                        <span className="text-zinc-400">Costo unit.{detail.items.length > 1 && it.sku ? ` · ${it.sku}` : ""}</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openEdit(it.sku, it.title, c); }}
-                          className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition hover:bg-white/10"
-                          title="Editar costo del SKU"
-                        >
-                          <span className={`tabular-nums font-semibold ${c == null ? "text-amber-300" : "text-zinc-100"}`}>{c == null ? "sin costo" : fmtPeso(c)}</span>
-                          <span className="flex h-5 w-5 items-center justify-center rounded bg-teal-500/15 text-teal-300">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="h-3 w-3"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                          </span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                  <div className="mt-2 border-t border-white/10 pt-2">
-                    <DetailRow label="Margen producto" value={`${fmtPeso(margenProd)} (${pctOf(margenProd)}%)`} tone={margenProd < 0 ? "red" : "green"} strong />
-                  </div>
-                  {!m.hasCost && (
-                    <p className="mt-1.5 text-xs text-amber-300/90">Costo incompleto: la utilidad es estimada.</p>
-                  )}
-                </Section>
-
-                {/* PLATAFORMA ML */}
-                <Section label="Plataforma ML">
-                  <DetailRow label="Comisión" value={m.comision ? "-" + fmtPeso(m.comision) : "$0"} tone="red" />
-                  {m.publi > 0 && <DetailRow label={`Publicidad (${publiPct}%)`} value={"-" + fmtPeso(m.publi)} tone="red" />}
-                </Section>
-
-                {/* ENVÍO */}
-                <Section label="Envío">
-                  <div className="flex items-center justify-between py-0.5">
-                    <span className="text-zinc-400">Tipo</span>
-                    <TipoBadges o={detail} />
-                  </div>
-                  <DetailRow label="ML te pasa" value={fmtPesoSigned(detail.shipSave ?? 0)} tone={(detail.shipSave ?? 0) >= 0 ? "green" : "red"} />
-                  <DetailRow label="Cadete" value={detail.shipCost ? "-" + fmtPeso(detail.shipCost) : "$0"} tone="red" />
-                  <div className="mt-2 border-t border-white/10 pt-2">
-                    <DetailRow label="Neto envío" value={fmtPesoSigned(m.envio)} tone={m.envio < 0 ? "red" : "green"} strong />
-                  </div>
-                </Section>
-
-                {/* RESULTADO */}
-                <Section label="Resultado">
-                  <DetailRow label="Venta" value={fmtPeso(m.venta)} />
-                  <DetailRow label="Margen producto" value={fmtPeso(margenProd)} tone={margenProd < 0 ? "red" : "green"} />
-                  <DetailRow label="Plataforma" value={plataforma ? "-" + fmtPeso(plataforma) : "$0"} tone="red" />
-                  <DetailRow label="Envío neto" value={fmtPesoSigned(m.envio)} tone={m.envio < 0 ? "red" : "green"} />
-                  <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3">
-                    <span className="text-base font-bold text-white">UTILIDAD</span>
-                    <span className={`text-xl font-bold tabular-nums ${m.margen < 0 ? "text-red-400" : "text-emerald-400"}`}>
-                      {fmtPeso(m.margen)} <span className="text-sm">({(m.pct * 100).toFixed(0)}%)</span>
-                    </span>
-                  </div>
-                  <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/5">
-                    <div style={{ width: `${wCosto}%` }} className="bg-red-500/70" />
-                    <div style={{ width: `${wPlat}%` }} className="bg-amber-500/70" />
-                    <div style={{ width: `${wUtil}%` }} className="bg-emerald-500/70" />
-                  </div>
-                  <div className="mt-1.5 flex justify-between text-[11px] font-medium">
-                    <span className="text-red-400">Costo {pctOf(m.costo)}%</span>
-                    <span className="text-amber-300">ML {pctOf(plataforma)}%</span>
-                    <span className="text-emerald-400">Utilidad {pctOf(m.margen)}%</span>
-                  </div>
-                </Section>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ---------- Modal editar costo ---------- */}
       {edit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !editLoading && setEdit(null)} />
-          <div className="animate-in card relative w-full max-w-sm border-white/10 p-6 shadow-2xl">
-            <h2 className="mb-1 text-lg font-bold text-white">Costo del producto</h2>
-            <p className="mb-1 text-sm text-zinc-400">
-              SKU <span className="font-mono text-zinc-200">{edit.sku || "—"}</span>
-            </p>
-            <p className="mb-4 line-clamp-2 text-xs text-zinc-500">{edit.title}</p>
-            <label className="mb-1 block text-xs font-medium text-zinc-500">Costo unitario (pesos)</label>
-            <input type="number" min={0} step="0.01" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="field" autoFocus placeholder="0" />
-            <p className="mt-2 text-xs text-zinc-500">Pisa al costo de Odoo para este SKU en todas las órdenes.</p>
-            {editError && <p className="mt-2 text-xs text-red-400">{editError}</p>}
-            <div className="mt-5 flex justify-end gap-2">
-              <button onClick={() => setEdit(null)} disabled={editLoading} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-zinc-300 transition hover:bg-white/5">Cancelar</button>
-              <button onClick={saveEdit} disabled={editLoading} className="brand-gradient brand-glow rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60">
-                {editLoading ? "Guardando…" : "Guardar"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <EditarCostoModal
+          edit={edit}
+          value={editValue}
+          onValueChange={setEditValue}
+          error={editError}
+          loading={editLoading}
+          onCancel={() => setEdit(null)}
+          onSave={saveEdit}
+        />
       )}
     </div>
   );
@@ -956,25 +790,6 @@ export default function OrdenesRealTime() {
 // ---------- Subcomponentes ----------
 function FragmentRow({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
-}
-
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-teal-400">{label}</div>
-      <div className="space-y-0.5 text-sm">{children}</div>
-    </section>
-  );
-}
-
-function DetailRow({ label, value, tone, strong }: { label: string; value: string; tone?: "red" | "green"; strong?: boolean }) {
-  const color = tone === "red" ? "text-red-400" : tone === "green" ? "text-emerald-400" : "text-zinc-100";
-  return (
-    <div className="flex items-center justify-between py-0.5">
-      <span className="text-zinc-400">{label}</span>
-      <span className={`tabular-nums ${strong ? "font-bold" : "font-medium"} ${color}`}>{value}</span>
-    </div>
-  );
 }
 
 function Th({ children, right, onClick, className }: { children: React.ReactNode; right?: boolean; onClick?: () => void; className?: string }) {
@@ -1019,21 +834,3 @@ function TabBtn({ active, onClick, children }: { active: boolean; onClick: () =>
   );
 }
 
-function TipoBadges({ o }: { o: ApiOrder }) {
-  const badges: { label: string; cls: string }[] = [];
-  const lt = o.logisticType;
-  if (lt === "self_service") badges.push({ label: "Flex", cls: "bg-sky-500/15 text-sky-200" });
-  else if (lt === "fulfillment") badges.push({ label: "Full", cls: "bg-teal-500/15 text-teal-200" });
-  else if (lt) badges.push({ label: lt.replace(/_/g, " "), cls: "bg-white/5 text-zinc-300" });
-  // Heurística: si el vendedor pagó envío → gratis para el comprador; si no, pago.
-  if (o.shipCost && o.shipCost > 0) badges.push({ label: "Pago", cls: "bg-amber-500/15 text-amber-200" });
-  else if (lt) badges.push({ label: "Gratis", cls: "bg-emerald-500/15 text-emerald-200" });
-  if (badges.length === 0) return <span className="text-xs text-zinc-600">—</span>;
-  return (
-    <div className="flex flex-wrap gap-1">
-      {badges.map((b, i) => (
-        <span key={i} className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${b.cls}`}>{b.label}</span>
-      ))}
-    </div>
-  );
-}

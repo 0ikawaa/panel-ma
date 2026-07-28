@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtInt } from "@/lib/format";
+import { hoyInput as todayStr, mesesAtrasInput as monthsAgoStr } from "@/lib/fechaVentas";
 import ProductThumb from "./ProductThumb";
 
 type ApiRow = {
@@ -18,17 +19,6 @@ type ApiResp = { desde: string; hasta: string; rows: ApiRow[]; count: number; sy
 
 type SortKey = "sku" | "titulo" | "vendidas" | "promMes" | "stock" | "enCamino" | "sugerida" | "valor";
 
-function todayStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
-function monthsAgoStr(n: number): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
 function fmtUsd(n: number | null): string {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";
   return "US$ " + n.toLocaleString("es-UY", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -90,7 +80,11 @@ export default function ReposicionLive() {
   }, [desde, hasta]);
 
   useEffect(() => {
-    fetchData();
+    // Fuera del render: `fetchData` prende el "cargando" apenas se lo llama y
+    // hacerlo sincrónicamente dentro del efecto encadena un render de más.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   // Cantidad de meses del período (para el promedio mensual).

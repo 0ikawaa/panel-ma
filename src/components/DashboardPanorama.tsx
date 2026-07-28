@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fmtPeso, fmtInt, fmtUSD, fmtCBM2 } from "@/lib/format";
 import { fmtFecha } from "@/lib/fecha";
+import { hoyInput as fmtLocal, mesesAtrasInput as monthsAgoStr } from "@/lib/fechaVentas";
 
 // ---------- Tipos de las APIs ----------
 type Channel = {
@@ -43,15 +44,6 @@ const CH_META: Record<string, { label: string; bar: string }> = {
 };
 
 // ---------- Fechas ----------
-function fmtLocal(d: Date): string {
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
-function monthsAgoStr(n: number): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - n);
-  return fmtLocal(d);
-}
 function currentYm(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -147,12 +139,17 @@ export default function DashboardPanorama() {
   // al cambiar de mes en el gráfico.
   useEffect(() => {
     let alive = true;
-    setCur(null);
-    setPrev(null);
     const r = ymRange(selMonth);
     const p = ymPrevRange(selMonth);
-    getJson<ResumenResp>(`/api/resumen?desde=${r.desde}&hasta=${r.hasta}`).then((c) => { if (alive) setCur(c); });
-    getJson<ResumenResp>(`/api/resumen?desde=${p.desde}&hasta=${p.hasta}`).then((pp) => { if (alive) setPrev(pp); });
+    // Volver los dos a null es lo que hace que la sección muestre "cargando"
+    // mientras llega el mes nuevo (el loading se deriva de `cur === null`). Va
+    // fuera del render para no encadenar un render de más en el mismo commit.
+    void (async () => {
+      setCur(null);
+      setPrev(null);
+      getJson<ResumenResp>(`/api/resumen?desde=${r.desde}&hasta=${r.hasta}`).then((c) => { if (alive) setCur(c); });
+      getJson<ResumenResp>(`/api/resumen?desde=${p.desde}&hasta=${p.hasta}`).then((pp) => { if (alive) setPrev(pp); });
+    })();
     return () => {
       alive = false;
     };

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtPeso, fmtPesoSigned } from "@/lib/format";
+import { hoyInput as todayStr, primeroDelMesInput as firstOfMonthStr } from "@/lib/fechaVentas";
 
 type Channel = {
   ordenes: number;
@@ -29,17 +30,6 @@ const META: Record<Key, { label: string; bar: string; text: string; ring: string
   local: { label: "Local (tienda)", bar: "bg-amber-400", text: "text-amber-300", ring: "border-amber-500/25" },
 };
 
-function todayStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
-function firstOfMonthStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  const first = new Date(d.getFullYear(), d.getMonth(), 1);
-  return new Date(first.getTime() - off * 60000).toISOString().slice(0, 10);
-}
 
 export default function ResumenVentas() {
   const [desde, setDesde] = useState(firstOfMonthStr);
@@ -88,7 +78,12 @@ export default function ResumenVentas() {
   }, [desde, hasta]);
 
   useEffect(() => {
-    fetchData();
+    // El fetch arranca fuera del render: `fetchData` prende el "cargando" ni
+    // bien se lo llama, y hacerlo sincrónicamente dentro del efecto encadena un
+    // render de más. Es el mismo patrón que usan las pantallas de Reportes.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   // Métricas derivadas por canal (con los % configurables aplicados).
