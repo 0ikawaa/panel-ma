@@ -11,10 +11,14 @@ export async function authenticate(
   username: string,
   password: string,
 ): Promise<SessionData | null> {
-  const envUser = process.env.ADMIN_USER ?? "admin";
-  const envPass = process.env.ADMIN_PASSWORD ?? "admin";
+  const envUser = process.env.ADMIN_USER;
+  const envPass = process.env.ADMIN_PASSWORD;
 
-  if (username === envUser && password === envPass) {
+  // Sin credenciales configuradas no hay superadmin. Antes esto caía a
+  // "admin"/"admin": si alguna vez se deployaba sin cargar las variables, el
+  // panel entero quedaba abierto con la contraseña más adivinable que existe.
+  // Es preferible que el superadmin no entre a que entre cualquiera.
+  if (envUser && envPass && username === envUser && password === envPass) {
     return {
       user: username,
       name: "Matias",

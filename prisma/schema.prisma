@@ -1,5 +1,6 @@
 // Esquema de base de datos - Plataforma MA Importaciones
-// Base de datos real (SQLite en local; ver README para pasar a Postgres en la nube)
+// Postgres (Neon). El esquema se cambia con migraciones versionadas:
+// `npx prisma migrate dev --name lo-que-cambiaste` (ver README).
 
 generator client {
   provider = "prisma-client-js"
@@ -61,7 +62,7 @@ model Product {
   containerId     String
   container       Container @relation(fields: [containerId], references: [id], onDelete: Cascade)
   rowIndex        Int // Orden de aparición en el Excel
-  photo           String? // Foto en base64 (data URL) extraída de la celda
+  photo           String? // URL de la foto en Vercel Blob (ver lib/photos.ts)
   /// true cuando la foto la puso una persona desde el panel (no salió del
   /// Excel). Una foto manual le gana a la de MercadoLibre en la tabla y en la
   /// planilla: si alguien se tomó el trabajo de corregirla, esa es la buena.
@@ -119,6 +120,22 @@ model User {
   createdAt    DateTime @default(now())
 }
 
+/// Intentos fallidos de login, para frenar la fuerza bruta contra el panel.
+///
+/// Hay una fila por clave y se usan dos claves a la vez (ver `lib/loginThrottle.ts`):
+/// `u:<usuario>|<ip>` frena a quien insiste con un usuario desde un lugar, e
+/// `ip:<ip>` frena a quien prueba usuarios distintos desde el mismo lugar. La
+/// fila se borra sola cuando el login sale bien.
+///
+/// Va en la base y no en memoria a propósito: en Vercel cada instancia tiene su
+/// propia memoria, así que un contador en RAM se saltea solo con reintentar.
+model LoginAttempt {
+  key         String    @id
+  fails       Int       @default(0)
+  lastFailAt  DateTime
+  lockedUntil DateTime?
+}
+
 /// Preferencias de perfil por usuario (ej. foto). Separado de User para que
 /// también valga para el superadmin, que no tiene fila en User.
 model Profile {
@@ -138,9 +155,6 @@ model ReportConfig {
   updatedAt  DateTime @updatedAt
 }
 
-/// Origen de un producto por código padre (base, sin variante). Se usa para
-/// decidir cuántos meses de cobertura pedir (China = 4, Brasil = 1). Solo se
-/// guardan los de Brasil; lo que no está listado se asume de China.
 /// Foto elegida a mano para un código, para reusarla en los embarques que
 /// vengan. Cuando alguien corrige la foto de un ítem en un embarque se guarda
 /// acá con su código base ("48108-BEI-39" -> "48108"), y todo ítem futuro con
@@ -152,6 +166,9 @@ model CodigoFoto {
   updatedAt DateTime @updatedAt
 }
 
+/// Origen de un producto por código padre (base, sin variante). Se usa para
+/// decidir cuántos meses de cobertura pedir (China = 4, Brasil = 1). Solo se
+/// guardan los de Brasil; lo que no está listado se asume de China.
 model ProductOrigin {
   codigo    String   @id // código padre / base, ej. "16000"
   origin    String   @default("brasil") // por ahora siempre "brasil"
