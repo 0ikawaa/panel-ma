@@ -111,9 +111,20 @@ function aFecha_(iso) {
   return iso ? new Date(iso) : '';
 }
 
+/** Instantes (recibido, generado): se leen en la zona horaria de la planilla. */
 function formatearFecha_(iso) {
   if (!iso) return '';
   return Utilities.formatDate(new Date(iso), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+}
+
+/**
+ * La ETA es una fecha de calendario, no un instante: viaja como medianoche UTC.
+ * Formatearla en la zona de la planilla (Uruguay, UTC-3) la corría un día para
+ * atrás, así que se lee en UTC y se muestra el día que se cargó en el panel.
+ */
+function formatearFechaUTC_(iso) {
+  if (!iso) return '';
+  return Utilities.formatDate(new Date(iso), 'UTC', 'dd/MM/yyyy');
 }
 
 /** 12345 -> "12.345". Utilities.formatString no maneja separador de miles. */
@@ -232,7 +243,7 @@ function escribirResumen_(ss, data) {
       filas.push([
         e.nombre,
         e.estadoLabel,
-        e.arribado ? formatearFecha_(e.receivedAt) : formatearFecha_(e.eta),
+        e.arribado ? formatearFecha_(e.receivedAt) : formatearFechaUTC_(e.eta),
         textoLlegada_(e)
       ]);
     }
@@ -295,7 +306,7 @@ function escribirEmbarque_(ss, emb) {
 
   // 2 · La fecha de llegada, en grande y con color. Es el dato principal.
   var col = coloresLlegada_(emb);
-  var fecha = emb.arribado ? formatearFecha_(emb.receivedAt) : formatearFecha_(emb.eta);
+  var fecha = emb.arribado ? formatearFecha_(emb.receivedAt) : formatearFechaUTC_(emb.eta);
   hoja.getRange(2, 1, 1, COLS).merge()
     .setValue(
       (emb.arribado ? 'RECIBIDO' : 'LLEGADA ESTIMADA') +

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { AUTH_COOKIE, verifySessionToken } from "@/lib/auth";
 import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 import { mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
 import ProductTable, { type DetalleLinea } from "@/components/ProductTable";
 import UploadExcel from "@/components/UploadExcel";
@@ -160,7 +161,7 @@ export default async function ContainerDetailPage({
               Próximo arribo estimado
             </p>
             <p className="text-lg font-bold text-white">
-              {container.eta ? fmtDate(container.eta) : "Sin fecha definida"}
+              {container.eta ? fmtFecha(container.eta) : "Sin fecha definida"}
             </p>
           </div>
           <div className="ml-auto">

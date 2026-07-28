@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { msQuery } from "@/lib/mundoshop";
+import { hoyUy } from "@/lib/fecha";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +34,9 @@ export async function GET() {
         _sum: { totalPrice: true },
       }),
       prisma.container.findFirst({
-        where: { receivedAt: null, eta: { gte: new Date() } },
+        // Desde el arranque del día uruguayo: lo que llega hoy sigue siendo el
+        // próximo arribo, no algo que ya pasó.
+        where: { receivedAt: null, eta: { gte: hoyUy() } },
         orderBy: { eta: "asc" },
         select: { name: true, eta: true },
       }),

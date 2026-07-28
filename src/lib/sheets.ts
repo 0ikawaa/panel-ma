@@ -14,6 +14,7 @@
 // con números, va como endpoint aparte y con su propio token.
 
 import { estadoEfectivo, estadoLabel, type Estado } from "./embarques";
+import { hoyUy } from "./fecha";
 
 /** Nombre de la pestaña de resumen. Queda reservado: ningún embarque puede usarlo. */
 export const PESTANA_RESUMEN = "Resumen";
@@ -134,7 +135,8 @@ function diaUtc(d: Date): number {
 
 /**
  * Días de calendario que faltan hasta la ETA. 0 = llega hoy, negativo = la
- * fecha ya pasó. null si no hay ETA cargada.
+ * fecha ya pasó. null si no hay ETA cargada. "Hoy" es el día uruguayo: de
+ * noche, en UTC ya es mañana y la cuenta quedaría un día corta.
  */
 export function diasHasta(
   eta: Date | string | null | undefined,
@@ -143,7 +145,7 @@ export function diasHasta(
   if (!eta) return null;
   const d = eta instanceof Date ? eta : new Date(eta);
   if (Number.isNaN(d.getTime())) return null;
-  return Math.round((diaUtc(d) - diaUtc(hoy)) / MS_POR_DIA);
+  return Math.round((diaUtc(d) - hoyUy(hoy).getTime()) / MS_POR_DIA);
 }
 
 /** Solo mandamos fotos servidas por http(s); un data URL base64 no lo renderiza =IMAGE(). */

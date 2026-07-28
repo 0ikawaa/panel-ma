@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { parseFecha } from "@/lib/fecha";
 
 // GET /api/containers  -> lista con estadísticas
 export async function GET() {
@@ -62,7 +63,8 @@ export async function POST(req: Request) {
     data: {
       name,
       supplier: body.supplier?.trim() || null,
-      eta: body.eta ? new Date(body.eta) : null,
+      // La ETA es una fecha de calendario: se guarda a medianoche UTC.
+      eta: parseFecha(body.eta),
       notes: body.notes?.trim() || null,
       freightCost: freight != null && isFinite(freight) ? freight : null,
       origin: body.origin === "brasil" ? "brasil" : "china",

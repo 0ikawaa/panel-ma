@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 import NewContainerButton from "@/components/NewContainerButton";
 import EmbarquesTabs from "@/components/EmbarquesTabs";
 
@@ -77,7 +78,7 @@ export default async function ArribosPage() {
                       <path d="M3 7h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Zm0 0 2-3h14l2 3M9 7v12M15 7v12" />
                     </svg>
                     <p className="text-xs font-medium text-white/80">
-                      {fmtDate(c.eta)}
+                      {fmtFecha(c.eta)}
                     </p>
                   </div>
                 </div>

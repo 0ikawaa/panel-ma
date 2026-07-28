@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { fmtDate, fmtUSD } from "@/lib/format";
+import { fmtUSD } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 import ContainerDocs, { type Doc } from "@/components/ContainerDocs";
 import { ESTADOS, estadoLabel, faltantes, type Estado } from "@/lib/embarques";
 
@@ -181,7 +182,7 @@ export default function EmbarquesBoard({ initial }: { initial: BoardContainer[] 
                       )}
 
                       <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                        <span className="text-zinc-400">{c.eta ? fmtDate(c.eta) : "sin ETA"}</span>
+                        <span className="text-zinc-400">{c.eta ? fmtFecha(c.eta) : "sin ETA"}</span>
                         <span className="font-semibold tabular-nums text-emerald-300">
                           {c.totalPrice != null ? fmtUSD(c.totalPrice) : "—"}
                         </span>
@@ -236,7 +237,7 @@ export default function EmbarquesBoard({ initial }: { initial: BoardContainer[] 
                 <h2 className="truncate text-lg font-bold text-white">{abierto.name}</h2>
                 <p className="mt-0.5 text-sm text-zinc-400">
                   {abierto.supplier ?? "Sin proveedor"} ·{" "}
-                  {abierto.eta ? fmtDate(abierto.eta) : "sin ETA"}
+                  {abierto.eta ? fmtFecha(abierto.eta) : "sin ETA"}
                 </p>
               </div>
               <button

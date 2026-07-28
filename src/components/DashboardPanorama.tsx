@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fmtPeso, fmtInt, fmtUSD, fmtCBM2, fmtDate } from "@/lib/format";
+import { fmtPeso, fmtInt, fmtUSD, fmtCBM2 } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 
 // ---------- Tipos de las APIs ----------
 type Channel = {
@@ -303,7 +304,7 @@ export default function DashboardPanorama() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} className="h-4 w-4 shrink-0 text-indigo-300"><path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <span className="hidden shrink-0 text-zinc-400 sm:inline">Próximo arribo:</span>
                   <span className="min-w-0 truncate font-semibold text-zinc-100">{imp.data.proximoArribo.name}</span>
-                  <span className="ml-auto shrink-0 tabular-nums text-zinc-400">{fmtDate(imp.data.proximoArribo.eta)}</span>
+                  <span className="ml-auto shrink-0 tabular-nums text-zinc-400">{fmtFecha(imp.data.proximoArribo.eta)}</span>
                 </div>
               )}
             </div>

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { fmtCBM, fmtDate, fmtUSD } from "@/lib/format";
+import { fmtCBM, fmtUSD } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 import { cbmPorUnidad } from "@/lib/cost";
 import type { DetalleLinea } from "@/components/ProductTable";
 import EmbarquesTabs from "@/components/EmbarquesTabs";
@@ -155,7 +156,7 @@ export default async function BuscarPage({
                       Próximo arribo
                     </p>
                     <p className="text-base font-bold text-teal-200">
-                      {r.nextEta ? fmtDate(r.nextEta) : "En camino (sin fecha)"}
+                      {r.nextEta ? fmtFecha(r.nextEta) : "En camino (sin fecha)"}
                     </p>
                   </div>
                 ) : (
@@ -202,7 +203,7 @@ export default async function BuscarPage({
                     <span className={`h-1.5 w-1.5 rounded-full ${c.received ? "bg-emerald-400" : "bg-teal-400"}`} />
                     {c.name}
                     <span className="text-zinc-500">
-                      · {c.received ? "recibido" : c.eta ? fmtDate(c.eta) : "en camino"}
+                      · {c.received ? "recibido" : c.eta ? fmtFecha(c.eta) : "en camino"}
                     </span>
                   </span>
                 ))}

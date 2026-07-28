@@ -77,6 +77,13 @@ describe("diasHasta", () => {
     expect(diasHasta(new Date("2026-07-25T00:00:00Z"), HOY)).toBe(-2);
   });
 
+  it("de noche sigue contando desde el día uruguayo, no el UTC", () => {
+    // 22:00 del 27 en Montevideo: en UTC ya es el 28, pero faltan 3 días.
+    const deNoche = new Date("2026-07-28T01:00:00Z");
+    expect(diasHasta(new Date("2026-07-30T00:00:00Z"), deNoche)).toBe(3);
+    expect(diasHasta(new Date("2026-07-27T00:00:00Z"), deNoche)).toBe(0);
+  });
+
   it("devuelve null sin ETA o con fecha inválida", () => {
     expect(diasHasta(null, HOY)).toBeNull();
     expect(diasHasta("no es fecha", HOY)).toBeNull();

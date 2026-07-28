@@ -2,12 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-
-function toInputDate(d: string | null): string {
-  if (!d) return "";
-  const dt = new Date(d);
-  return isNaN(dt.getTime()) ? "" : dt.toISOString().slice(0, 10);
-}
+import { toInputFecha } from "@/lib/fecha";
 
 export default function EditEtaButton({
   containerId,
@@ -18,7 +13,7 @@ export default function EditEtaButton({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(toInputDate(eta));
+  const [value, setValue] = useState(toInputFecha(eta));
   const [loading, setLoading] = useState(false);
 
   async function save() {
@@ -40,7 +35,7 @@ export default function EditEtaButton({
     <>
       <button
         onClick={() => {
-          setValue(toInputDate(eta));
+          setValue(toInputFecha(eta));
           setOpen(true);
         }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-semibold text-zinc-200 transition hover:bg-white/10"

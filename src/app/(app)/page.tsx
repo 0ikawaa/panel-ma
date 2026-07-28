@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { fmtCBM2, fmtDate, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
+import { fmtFecha } from "@/lib/fecha";
 import NewContainerButton from "@/components/NewContainerButton";
 
 export const dynamic = "force-dynamic";
@@ -133,7 +134,7 @@ export default async function DashboardPage() {
                     </p>
                     <p className="truncate text-sm text-zinc-500">
                       {c.supplier ? `${c.supplier} · ` : ""}
-                      {fmtDate(c.eta)}
+                      {fmtFecha(c.eta)}
                     </p>
                   </div>
                   <div className="text-right">

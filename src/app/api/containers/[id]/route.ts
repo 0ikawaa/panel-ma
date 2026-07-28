@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { deleteBlobUrls } from "@/lib/photos";
 import { estadoAnterior, estadoEfectivo, isEstado } from "@/lib/embarques";
+import { parseFecha } from "@/lib/fecha";
 
 // GET /api/containers/:id  -> detalle con productos
 export async function GET(
@@ -32,7 +33,8 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if (typeof body.name === "string" && body.name.trim()) data.name = body.name.trim();
   if ("supplier" in body) data.supplier = body.supplier?.trim() || null;
-  if ("eta" in body) data.eta = body.eta ? new Date(body.eta) : null;
+  // La ETA es una fecha de calendario: se guarda a medianoche UTC.
+  if ("eta" in body) data.eta = parseFecha(body.eta);
   if ("notes" in body) data.notes = body.notes?.trim() || null;
 
   // Estado del tablero y "recibido" son la misma cosa vista de dos formas:
