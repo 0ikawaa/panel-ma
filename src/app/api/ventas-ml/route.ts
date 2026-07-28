@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { msQuery, mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
+import { msQuery, mlPhotoMap } from "@/lib/mundoshop";
+import { fotoPorSku, indexarFotosPorCodigo } from "@/lib/fotoProducto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -20,7 +21,7 @@ type OrderItem = {
   unitPrice: number;
   baseCost: number | null; // costo unitario final: override de la API, o Odoo×IVA
   overrideCost: number | null; // override manual local (nuestra base Neon)
-  photo: string | null; // foto ML (o del Excel de Importaciones como fallback)
+  photo: string | null; // foto a mostrar: manual > MercadoLibre > Excel
 };
 
 type Order = {
@@ -88,7 +89,7 @@ export async function GET(req: Request) {
       mlPhotoMap(),
       prisma.product.findMany({
         where: { codigo: { not: null }, photo: { not: null } },
-        select: { codigo: true, photo: true },
+        select: { codigo: true, photo: true, fotoManual: true },
         orderBy: { createdAt: "desc" },
       }),
     ]);
@@ -100,17 +101,9 @@ export async function GET(req: Request) {
   }
 
   const ovMap = new Map(overrides.map((o) => [o.sku, o.cost]));
-  // Foto del Excel de Importaciones por código (la más reciente).
-  const excelPhotoByCode = new Map<string, string>();
-  for (const p of excelPhotos) {
-    if (p.codigo && p.photo && !excelPhotoByCode.has(p.codigo)) excelPhotoByCode.set(p.codigo, p.photo);
-  }
-  const photoDe = (sku: string): string | null => {
-    const ml = resolveMlPhoto(photos, sku);
-    if (ml) return ml;
-    const base = sku.split(/[-\s/]/)[0].trim();
-    return excelPhotoByCode.get(sku) ?? excelPhotoByCode.get(base) ?? null;
-  };
+  // Misma prioridad que la tabla de Embarques y que la planilla: manual > ML > Excel.
+  const fotos = indexarFotosPorCodigo(excelPhotos);
+  const photoDe = (sku: string): string | null => fotoPorSku(fotos, photos, sku);
 
   const byOrder = new Map<string, Order>();
   for (const r of rows) {
