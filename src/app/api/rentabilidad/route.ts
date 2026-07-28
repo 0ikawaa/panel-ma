@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { msQuery, mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
-
-// Código base de un SKU con variante: "20105-NEG" → "20105".
-function baseCode(sku: string): string {
-  return sku.split(/[-\s/]/)[0].trim();
-}
+import { msQuery, mlPhotoMap } from "@/lib/mundoshop";
+import { fotoPorSku, indexarFotosPorCodigo } from "@/lib/fotoProducto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -119,7 +115,7 @@ export async function GET(req: Request) {
   let apiOv: Record<string, unknown>[];
   let neonOv: { sku: string; cost: number }[];
   let photos: Awaited<ReturnType<typeof mlPhotoMap>>;
-  let excelPhotos: { codigo: string | null; photo: string | null }[];
+  let excelPhotos: { codigo: string | null; photo: string | null; fotoManual: boolean }[];
   try {
     [mlRows, saleRows, posRows, prodRows, apiOv, neonOv, photos, excelPhotos] = await Promise.all([
       msQuery(sqlMl),
@@ -131,7 +127,7 @@ export async function GET(req: Request) {
       mlPhotoMap(),
       prisma.product.findMany({
         where: { codigo: { not: null }, photo: { not: null } },
-        select: { codigo: true, photo: true },
+        select: { codigo: true, photo: true, fotoManual: true },
         orderBy: { createdAt: "desc" },
       }),
     ]);
@@ -142,16 +138,9 @@ export async function GET(req: Request) {
     );
   }
 
-  // Foto: ML primero; si no, la del Excel de Importaciones (por SKU exacto o código base).
-  const excelPhotoByCode = new Map<string, string>();
-  for (const p of excelPhotos) {
-    if (p.codigo && p.photo && !excelPhotoByCode.has(p.codigo)) excelPhotoByCode.set(p.codigo, p.photo);
-  }
-  const photoDe = (sku: string): string | null => {
-    const ml = resolveMlPhoto(photos, sku);
-    if (ml) return ml;
-    return excelPhotoByCode.get(sku) ?? excelPhotoByCode.get(baseCode(sku)) ?? null;
-  };
+  // Misma prioridad que la tabla de Embarques y que la planilla: manual > ML > Excel.
+  const fotos = indexarFotosPorCodigo(excelPhotos);
+  const photoDe = (sku: string): string | null => fotoPorSku(fotos, photos, sku);
 
   // ---------- Costo unitario vigente por SKU ----------
   // Prioridad: override local (Neon) > override de la API > Odoo × IVA.

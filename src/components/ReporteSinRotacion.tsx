@@ -30,12 +30,17 @@ export default function ReporteSinRotacion() {
   // Filtro por motivo (null = todos).
   const [filtro, setFiltro] = useState<Motivo | null>(null);
 
-  const refresh = useCallback(async () => {
+  // Al abrir la pantalla vale el reporte cacheado (es instantáneo); apretar
+  // «Actualizar» pide explícitamente que se rehaga con los datos de ahora.
+  const refresh = useCallback(async (forzar = false) => {
     setRefreshing(true);
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch("/api/reportes/sin-rotacion", { cache: "no-store", signal: AbortSignal.timeout(60000) });
+      const url = forzar
+        ? "/api/reportes/sin-rotacion?forzar=1"
+        : "/api/reportes/sin-rotacion";
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(60000) });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
       setItems(j.report.items);
@@ -105,7 +110,7 @@ export default function ReporteSinRotacion() {
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
-            onClick={refresh}
+            onClick={() => void refresh(true)}
             disabled={busy}
             className="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 disabled:opacity-60"
           >
@@ -152,7 +157,7 @@ export default function ReporteSinRotacion() {
               <NumField label="Caída mínima (%)" value={Math.round(p.caidaMin * 100)} step={5} onChange={(v) => setParam("caidaMin", Math.min(100, Math.max(0, v)) / 100)} />
             </div>
             <div className="flex items-center justify-end gap-2">
-              <button onClick={refresh} className="rounded-lg px-3 py-2 text-sm text-zinc-400 transition hover:text-white">Deshacer</button>
+              <button onClick={() => void refresh()} className="rounded-lg px-3 py-2 text-sm text-zinc-400 transition hover:text-white">Deshacer</button>
               <button
                 onClick={guardarConfig}
                 disabled={savingCfg}

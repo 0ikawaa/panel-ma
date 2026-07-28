@@ -14,6 +14,7 @@
 // `photo`, así que los ítems que en pantalla se veían con la foto de ML salían
 // con la celda vacía en la hoja.
 
+import { claveCodigo } from "./claveCodigo";
 import { resolveMlPhoto, type MlPhotoMaps } from "./mundoshop";
 
 export interface ProductoConFoto {
@@ -63,4 +64,77 @@ export function renderizableEnSheets(url: string | null | undefined): boolean {
   // Sin extensión no se puede saber; se manda igual (ML sirve varias así).
   if (!ext) return true;
   return ["jpg", "jpeg", "png", "gif", "bmp"].includes(ext);
+}
+
+// ---------------------------------------------------------------------------
+// Resolución por SKU de venta
+//
+// Las pantallas de ventas (Órdenes ML, Rentabilidad, Reposición) no tienen el
+// ítem del embarque a mano: tienen un SKU de MercadoLibre / Odoo. Para que la
+// foto que muestran sea la misma que la de Embarques hay que indexar los
+// productos por código y buscar por ahí, pero respetando la misma prioridad:
+// manual > MercadoLibre > Excel.
+// ---------------------------------------------------------------------------
+
+/** Fotos de los embarques indexadas por código, listas para buscar por SKU. */
+export interface FotosPorCodigo {
+  manual: Map<string, string>;
+  excel: Map<string, string>;
+}
+
+/** Guarda `url` bajo `clave` si la clave sirve y todavía no estaba tomada. */
+function agregar(map: Map<string, string>, clave: string | null | undefined, url: string): void {
+  if (clave && !map.has(clave)) map.set(clave, url);
+}
+
+/** Código tal cual vino, normalizado para comparar sin sorpresas de mayúsculas. */
+function exacto(codigo: string | null | undefined): string | null {
+  const t = typeof codigo === "string" ? codigo.trim().toUpperCase() : "";
+  return t || null;
+}
+
+/**
+ * Indexa las fotos de los embarques por código, en dos mapas separados (las
+ * manuales pesan más que las del Excel y no se pueden mezclar).
+ *
+ * Cada foto se guarda dos veces: bajo el código tal cual ("48108-BEI-39") y bajo
+ * su clave base ("48108"), así un SKU con otra variante igual la encuentra.
+ *
+ * **`productos` tiene que venir ordenado del más nuevo al más viejo**: gana el
+ * primero que reclama cada clave, o sea la foto del embarque más reciente.
+ */
+export function indexarFotosPorCodigo(productos: ProductoConFoto[]): FotosPorCodigo {
+  const manual = new Map<string, string>();
+  const excel = new Map<string, string>();
+  for (const p of productos) {
+    if (!p.photo) continue;
+    // `claveCodigo` es el juez de qué texto identifica un producto: si dice que
+    // no ("s/c", "-", una descripción con espacios), tampoco vale indexarlo por
+    // su forma literal — sólo generaría cruces con SKUs que no tienen que ver.
+    const clave = claveCodigo(p.codigo);
+    if (!clave) continue;
+    const destino = p.fotoManual ? manual : excel;
+    agregar(destino, exacto(p.codigo), p.photo);
+    agregar(destino, clave, p.photo);
+  }
+  return { manual, excel };
+}
+
+/** Busca un SKU en un mapa: primero tal cual, después por su clave base. */
+function buscar(map: Map<string, string>, sku: string): string | null {
+  return map.get(exacto(sku) ?? "") ?? map.get(claveCodigo(sku) ?? "") ?? null;
+}
+
+/**
+ * Foto a mostrar para un SKU de venta, con la misma prioridad que `fotoMostrada`:
+ * la corregida a mano primero, después la de MercadoLibre, y por último la que
+ * vino en el Excel del proveedor.
+ */
+export function fotoPorSku(
+  idx: FotosPorCodigo,
+  ml: MlPhotoMaps,
+  sku: string | null | undefined,
+): string | null {
+  if (!sku) return null;
+  return buscar(idx.manual, sku) ?? resolveMlPhoto(ml, sku) ?? buscar(idx.excel, sku) ?? null;
 }

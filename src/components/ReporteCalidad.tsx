@@ -33,11 +33,14 @@ export default function ReporteCalidad() {
   const [filtro, setFiltro] = useState<Filtro>("calidad");
   const [abierta, setAbierta] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // Al abrir la pantalla vale el reporte cacheado (es instantáneo); apretar
+  // «Actualizar» pide explícitamente que se rehaga con los datos de ahora.
+  const load = useCallback(async (forzar = false) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/reportes/calidad", { cache: "no-store", signal: AbortSignal.timeout(115000) });
+      const url = forzar ? "/api/reportes/calidad?forzar=1" : "/api/reportes/calidad";
+      const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(115000) });
       const j = await res.json();
       if (!res.ok) throw new Error(j?.error || `Error ${res.status}`);
       setReport(j.report);
@@ -83,7 +86,7 @@ export default function ReporteCalidad() {
         </div>
         <div className="flex shrink-0 flex-wrap gap-2">
           <button
-            onClick={load}
+            onClick={() => void load(true)}
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/5 px-3.5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-white/10 disabled:opacity-60"
           >

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { msQuery, mlPhotoMap, resolveMlPhoto } from "@/lib/mundoshop";
+import { msQuery, mlPhotoMap } from "@/lib/mundoshop";
+import { fotoPorSku, indexarFotosPorCodigo } from "@/lib/fotoProducto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -27,7 +28,7 @@ type Row = {
   stock: number | null; // disponible actual (Odoo qty_available)
   enCamino: number; // unidades en contenedores/producción (productos_en_camino)
   costoOrigen: number | null; // FOB USD (Product.precioChina de Importaciones)
-  photo: string | null; // foto ML (o del Excel de Importaciones como fallback)
+  photo: string | null; // foto a mostrar: manual > MercadoLibre > Excel
 };
 
 /**
@@ -85,7 +86,12 @@ export async function GET(req: Request) {
   let ventasRows: Record<string, unknown>[];
   let stockRows: Record<string, unknown>[];
   let campinoRows: Record<string, unknown>[];
-  let productos: { codigo: string | null; precioChina: number | null; photo: string | null }[];
+  let productos: {
+    codigo: string | null;
+    precioChina: number | null;
+    photo: string | null;
+    fotoManual: boolean;
+  }[];
   let photos: Awaited<ReturnType<typeof mlPhotoMap>>;
   try {
     [ventasRows, stockRows, campinoRows, productos, photos] = await Promise.all([
@@ -95,7 +101,7 @@ export async function GET(req: Request) {
       // Costo de origen (FOB USD) + foto del Excel desde los contenedores de Importaciones.
       prisma.product.findMany({
         where: { codigo: { not: null } },
-        select: { codigo: true, precioChina: true, photo: true },
+        select: { codigo: true, precioChina: true, photo: true, fotoManual: true },
         orderBy: { createdAt: "desc" },
       }),
       mlPhotoMap(),
@@ -119,25 +125,20 @@ export async function GET(req: Request) {
   const campinoMap = new Map<string, number>();
   for (const r of campinoRows) campinoMap.set(String(r.sku), num(r.en_camino) ?? 0);
 
-  // Costo de origen y foto del Excel: lo más reciente por código (productos vienen ordenados desc).
+  // Costo de origen: lo más reciente por código (productos vienen ordenados desc).
   const costoMap = new Map<string, number>();
-  const excelPhotoByCode = new Map<string, string>();
   for (const p of productos) {
     if (!p.codigo) continue;
     if (p.precioChina != null && !costoMap.has(p.codigo)) costoMap.set(p.codigo, p.precioChina);
-    if (p.photo && !excelPhotoByCode.has(p.codigo)) excelPhotoByCode.set(p.codigo, p.photo);
   }
+  const fotos = indexarFotosPorCodigo(productos);
   const costoDe = (sku: string): number | null => {
     if (costoMap.has(sku)) return costoMap.get(sku)!;
     const b = baseCode(sku);
     return costoMap.has(b) ? costoMap.get(b)! : null;
   };
-  // Foto: ML primero; si no, la del Excel (por SKU exacto o código base).
-  const photoDe = (sku: string): string | null => {
-    const ml = resolveMlPhoto(photos, sku);
-    if (ml) return ml;
-    return excelPhotoByCode.get(sku) ?? excelPhotoByCode.get(baseCode(sku)) ?? null;
-  };
+  // Misma prioridad que la tabla de Embarques y que la planilla: manual > ML > Excel.
+  const photoDe = (sku: string): string | null => fotoPorSku(fotos, photos, sku);
 
   // Lista base: SKUs que tuvieron ventas y cuyo código empieza con dígito
   // (descarta "self_service", "drop_off", etc., igual que el módulo anterior).

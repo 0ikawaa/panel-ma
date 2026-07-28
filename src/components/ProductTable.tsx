@@ -1,10 +1,53 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import Image from "next/image";
 import { fmtCBM, fmtCBM2, fmtInt, fmtUSD } from "@/lib/format";
+import { esOptimizable } from "@/lib/fotoOptimizable";
 import { landedCost, cbmPorUnidad, IVA, type Origin } from "@/lib/cost";
 import EditProductButton from "./EditProductButton";
 import DeleteProductButton from "./DeleteProductButton";
+
+/**
+ * Encabezado ordenable de la tabla.
+ *
+ * Vive fuera del componente a propósito: definido adentro, React lo trata como
+ * un tipo de componente nuevo en cada render y desmonta y vuelve a montar cada
+ * `<th>` cada vez que cambia cualquier cosa de la tabla.
+ */
+function Header({
+  label,
+  k,
+  right,
+  accent,
+  sortKey,
+  asc,
+  onSort,
+}: {
+  label: string;
+  k: SortKey;
+  right?: boolean;
+  accent?: "red";
+  sortKey: SortKey;
+  asc: boolean;
+  onSort: (k: SortKey) => void;
+}) {
+  return (
+    <th
+      onClick={() => onSort(k)}
+      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide transition ${
+        accent === "red" ? "text-red-300 hover:text-red-200" : "text-zinc-400 hover:text-white"
+      } ${right ? "text-right" : "text-left"}`}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {sortKey === k && (
+          <span className={accent === "red" ? "text-red-400" : "text-teal-400"}>{asc ? "▲" : "▼"}</span>
+        )}
+      </span>
+    </th>
+  );
+}
 
 export interface DetalleLinea {
   codigos: string[];
@@ -103,32 +146,6 @@ export default function ProductTable({
     });
   }
 
-  const Header = ({
-    label,
-    k,
-    right,
-    accent,
-  }: {
-    label: string;
-    k: SortKey;
-    right?: boolean;
-    accent?: "red";
-  }) => (
-    <th
-      onClick={() => toggleSort(k)}
-      className={`cursor-pointer select-none whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wide transition ${
-        accent === "red" ? "text-red-300 hover:text-red-200" : "text-zinc-400 hover:text-white"
-      } ${right ? "text-right" : "text-left"}`}
-    >
-      <span className="inline-flex items-center gap-1">
-        {label}
-        {sortKey === k && (
-          <span className={accent === "red" ? "text-red-400" : "text-teal-400"}>{asc ? "▲" : "▼"}</span>
-        )}
-      </span>
-    </th>
-  );
-
   return (
     <>
       {/* ---------- Lista (celular) ---------- */}
@@ -175,12 +192,13 @@ export default function ProductTable({
                       }}
                       className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white/5"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={p.photo}
                         alt={p.codigo ?? "Producto"}
+                        width={64}
+                        height={64}
                         loading="lazy"
-                        decoding="async"
+                        unoptimized={!esOptimizable(p.photo)}
                         className="h-full w-full object-cover"
                       />
                     </button>
@@ -277,13 +295,13 @@ export default function ProductTable({
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Foto
               </th>
-              <Header label="Código" k="codigo" />
-              <Header label="Unidades" k="unidades" right />
-              <Header label="Precio unit." k="precioChina" right accent="red" />
+              <Header label="Código" k="codigo" sortKey={sortKey} asc={asc} onSort={toggleSort} />
+              <Header label="Unidades" k="unidades" right sortKey={sortKey} asc={asc} onSort={toggleSort} />
+              <Header label="Precio unit." k="precioChina" right accent="red" sortKey={sortKey} asc={asc} onSort={toggleSort} />
               <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 CBM u.
               </th>
-              <Header label="Precio lote" k="montoTotal" right />
+              <Header label="Precio lote" k="montoTotal" right sortKey={sortKey} asc={asc} onSort={toggleSort} />
               <th className="whitespace-nowrap px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-teal-300">
                 Costo final /u
               </th>
@@ -325,12 +343,13 @@ export default function ProductTable({
                           }}
                           className="group relative block h-14 w-14 overflow-hidden rounded-lg border border-white/10 bg-white/5"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
+                          <Image
                             src={p.photo}
                             alt={p.codigo ?? "Producto"}
+                            width={56}
+                            height={56}
                             loading="lazy"
-                            decoding="async"
+                            unoptimized={!esOptimizable(p.photo)}
                             className="h-full w-full object-cover transition group-hover:scale-105"
                           />
                         </button>
@@ -419,6 +438,9 @@ export default function ProductTable({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6 backdrop-blur-sm"
           onClick={() => setLightbox(null)}
         >
+          {/* El lightbox va sin optimizar a propósito: es el único lugar donde
+              se quiere ver la foto en su tamaño real, y sólo se baja cuando
+              alguien la abre. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={lightbox}

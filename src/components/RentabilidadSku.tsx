@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fmtInt, fmtPeso } from "@/lib/format";
+import { hoyInput as todayStr, primeroDelMesInput as firstOfMonthStr } from "@/lib/fechaVentas";
 import ProductThumb from "./ProductThumb";
 
 type Row = {
@@ -49,17 +50,6 @@ const ORDENES: { key: Orden; label: string }[] = [
 
 const PAGINA = 50;
 
-function todayStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
-}
-function firstOfMonthStr(): string {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  const first = new Date(d.getFullYear(), d.getMonth(), 1);
-  return new Date(first.getTime() - off * 60000).toISOString().slice(0, 10);
-}
 
 export default function RentabilidadSku() {
   const [desde, setDesde] = useState(firstOfMonthStr);
@@ -111,7 +101,11 @@ export default function RentabilidadSku() {
   }, [desde, hasta]);
 
   useEffect(() => {
-    fetchData();
+    // Fuera del render: `fetchData` prende el "cargando" apenas se lo llama y
+    // hacerlo sincrónicamente dentro del efecto encadena un render de más.
+    void (async () => {
+      await fetchData();
+    })();
   }, [fetchData]);
 
   const filtradas = useMemo(() => {
