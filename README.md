@@ -17,7 +17,7 @@ con base **Postgres (Neon)**. Los datos de ventas y stock se leen en vivo de la 
 | **Dashboard** | Panorama general del negocio. |
 | **Importaciones** | • **Resumen** de importaciones · • **Tablero** kanban de embarques (con adjuntos) · • **Embarques**: subís el Excel de cada contenedor y muestra foto, código, FOB, CBM y totales (extrae las fotos incrustadas en las celdas) · • **Calculadora** de costo nacionalizado · • **Buscar SKU**. |
 | **Ventas** | • **Resumen de Ventas** (ML + Odoo local/mayorista/otros) · • **Rentabilidad por SKU** · • **Órdenes ML** en tiempo real · • **Reposición** (cruza ventas con stock y sugiere cuánto pedir). |
-| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear) · • **Calidad de las publicaciones** (health de ML + objetivos a cumplir) · • **Publicaciones a revisar** (inactivas con stock en Odoo y su motivo + activas sin ventas en una ventana configurable). |
+| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear) · • **Calidad de las publicaciones** (health de ML + objetivos a cumplir) · • **Mala experiencia de compra** (SKU unificados por debajo del 100%, con semáforo, problema principal y cómo mejorarlo según ML; avisa por mail cuando una publicación baja) · • **Publicaciones a revisar** (inactivas con stock en Odoo y su motivo + activas sin ventas en una ventana configurable). |
 | **Administración** | Gestión de usuarios y sus módulos, backups. |
 
 El menú (sidebar y nav móvil) muestra a cada usuario solo los módulos que tiene habilitados.
@@ -113,6 +113,10 @@ commitea junto con el cambio de schema**: es el que corre en producción durante
 | `SHEETS_TOKEN` | Protege el feed de embarques que consume la planilla de Google Sheets (opcional; sin él, el feed queda cerrado). |
 | `REPORT_WHATSAPP_TO` | Número(s) destino del reporte por WhatsApp (opcional). |
 | `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TEMPLATE_NAME`, `WHATSAPP_TEMPLATE_LANG` | Envío por WhatsApp vía Meta Cloud API (opcional; si faltan, el reporte igual se genera y se muestra). |
+| `RESEND_API_KEY` | Clave de [Resend](https://resend.com) para las alertas por mail de experiencia de compra (opcional; sin ella el reporte se muestra igual y el aviso queda en `skipped:sin-config`). |
+| `REPORT_EMAIL_FROM` | Remitente de las alertas, ej. `MA Importaciones <alertas@maimportaciones.com.uy>`. El dominio tiene que estar **verificado** en Resend; sin dominio propio solo se puede mandar desde `onboarding@resend.dev` a la casilla de la cuenta. |
+| `REPORT_EMAIL_TO` | Mail(es) destino por defecto de las alertas. Lo que se configure desde la pantalla del reporte le gana a esto. |
+| `PANEL_BASE_URL` | Base para el link al panel dentro del mail (opcional; en Vercel se deduce del dominio del deploy). |
 
 El `.env` y cualquier base local están en `.gitignore` (no se suben). Ver `.env.example`.
 
@@ -120,8 +124,7 @@ El `.env` y cualquier base local están en `.gitignore` (no se suben). Ver `.env
 
 ## ⏰ Reportes automáticos (cron)
 
-El reporte **Ventas aceleradas** puede correr y enviarse solo todos los días. Está configurado en
-`vercel.json`:
+Dos reportes corren y se envían solos todos los días. Está configurado en `vercel.json`:
 
 ```json
 { "crons": [ { "path": "/api/cron/reportes", "schedule": "0 12 * * *" } ] }
@@ -129,6 +132,38 @@ El reporte **Ventas aceleradas** puede correr y enviarse solo todos los días. E
 
 `12:00 UTC` = **09:00 de Uruguay** (UTC-3). El endpoint valida el header `Authorization: Bearer $CRON_SECRET`,
 así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para que funcione.
+
+Lo que hace cada corrida:
+
+- **Ventas aceleradas** → se manda por WhatsApp si hay SKU en riesgo.
+- **Experiencia de compra** → compara el puntaje de cada publicación contra la corrida anterior y, si
+  alguna bajó, manda **un mail** con la lista y deja la publicación **marcada en el panel** hasta que
+  alguien la marque como vista.
+
+Los dos van con `Promise.allSettled`: si uno falla, el otro sale igual.
+
+### Alertas de experiencia de compra
+
+MercadoLibre le pone a cada publicación un puntaje de **experiencia de compra** de 0 a 100 que sale de
+nueve aspectos con distinto peso: ficha técnica/health (25 pts), fotos (15), opiniones (15), envío
+gratis (10), catálogo (10), descripción (10), carrito (5), video (5) e infracciones (5). **No es lo
+mismo que el `health`** del reporte *Calidad de las publicaciones*: el health es uno de los nueve.
+
+Detalles de cómo funciona la alerta:
+
+- **La primera corrida no avisa.** Guarda el puntaje de cada publicación como punto de partida en
+  `ExperienciaScore`. Sin eso, el primer mail serían ~800 publicaciones que ya venían flojas.
+- **Avisa cuando el puntaje baja** respecto de la corrida anterior, con un mínimo de puntos
+  (`minCaida`, por defecto 5) para que no moleste por ±1 punto. Dejar de estar en 100% se avisa
+  siempre, aunque sea de un punto.
+- **La marca se limpia sola** si la publicación recupera el puntaje que tenía; también se puede marcar
+  como vista a mano desde la pantalla.
+- El destino del mail se edita desde la pantalla del reporte (o con `REPORT_EMAIL_TO`).
+
+**Reclamos por publicación:** la API de MercadoLibre todavía no los expone (el permiso no está
+habilitado), así que la tabla `ml_claims` de MUNDO SHOP está vacía. La consulta ya está armada: cuando
+se habilite, los reclamos por SKU aparecen solos. Mientras tanto se muestra el total del vendedor
+(`/ml-reputacion`, últimos 120 días) y, por SKU, las **cancelaciones** de sus órdenes.
 
 ---
 

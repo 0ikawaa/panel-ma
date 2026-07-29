@@ -151,8 +151,44 @@ model ReportConfig {
   key        String   @id // identificador del reporte, ej. "ventas-aceleradas"
   enabled    Boolean  @default(true) // si el envío automático (cron) está activo
   whatsappTo String? // números destino en E.164 sin "+", separados por coma
+  emailTo    String? // mails destino separados por coma (alertas de experiencia)
   params     Json? // umbrales del reporte (ventanaDias, baseDias, ratioMin, ...)
   updatedAt  DateTime @updatedAt
+}
+
+/// Último puntaje de experiencia de compra conocido de una publicación de ML, y
+/// la marca de «bajó» que se muestra en el panel.
+///
+/// Existe para poder COMPARAR: el puntaje lo calcula ML en el momento, así que
+/// sin guardar el anterior no hay forma de saber si una publicación empeoró. La
+/// primera corrida solo escribe la foto inicial y no avisa nada — si no, el
+/// primer mail serían cientos de publicaciones que ya venían flojas.
+///
+/// Los campos `bajo*` son la marca del panel: se llenan cuando el puntaje cae y
+/// se limpian cuando alguien la marca como vista o cuando la publicación
+/// recupera el puntaje que tenía.
+model ExperienciaScore {
+  itemId    String   @id // id de la publicación (MLU...)
+  sku       String? // SKU de la publicación, si tiene
+  codigo    String? // código base / SKU unificado del grupo
+  titulo    String
+  score     Int // puntaje actual (0..100)
+  nivel     String // EXCELENTE | BUENA | REGULAR | MALA
+  checkedAt DateTime // cuándo se leyó este puntaje
+
+  // ---- marca de caída (lo que se ve en el panel y se avisa por mail) ----
+  bajoDe       Int? // puntaje que tenía antes de caer
+  bajoDelta    Int? // puntos que bajó
+  bajoEn       DateTime? // cuándo se detectó la caída
+  bajoCruzo100 Boolean   @default(false) // venía en 100 y dejó de estar perfecta
+  bajoProblema String? // problema principal en el momento de la caída
+  avisadoEn    DateTime? // cuándo salió el mail
+  avisoStatus  String? // "sent" | "skipped:<motivo>" | "error:<detalle>"
+  vistoEn      DateTime? // cuándo se marcó como vista en el panel
+  vistoPor     String? // quién la marcó
+
+  @@index([codigo])
+  @@index([bajoEn])
 }
 
 /// Foto elegida a mano para un código, para reusarla en los embarques que
@@ -192,12 +228,14 @@ model VentaHistorica {
 /// SKUs marcados para poder mostrarlo en la sección y saber qué se envió.
 model ReportRun {
   id             String   @id @default(cuid())
-  reportKey      String // "ventas-aceleradas"
+  reportKey      String // "ventas-aceleradas" | "experiencia"
   trigger        String   @default("manual") // "manual" | "cron"
   items          Json // SKUs en riesgo detectados (snapshot)
   summary        Json // { total, unidadesRiesgo, ... }
   whatsappStatus String? // "sent" | "skipped:<motivo>" | "error:<detalle>"
   whatsappTo     String? // a qué número(s) se envió
+  emailStatus    String? // ídem para el mail (reporte de experiencia)
+  emailTo        String? // a qué mail(s) se envió
   createdAt      DateTime @default(now())
 
   @@index([reportKey, createdAt])
