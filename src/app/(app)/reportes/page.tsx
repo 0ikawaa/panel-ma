@@ -33,6 +33,13 @@ const REPORTES = [
     activo: true,
   },
   {
+    href: "/reportes/experiencia",
+    titulo: "Publicaciones con mala experiencia de compra",
+    desc: "Los SKU unificados cuya experiencia de compra en ML no llega al 100%, con semáforo, el problema principal y qué pide MercadoLibre para arreglarlo. Adentro, todos los tipos de problema más las ventas y los reclamos. Cuando una publicación baja de puntaje queda marcada y se avisa por mail.",
+    tag: "En vivo · Mail",
+    activo: true,
+  },
+  {
     href: "/reportes/publicaciones",
     titulo: "Publicaciones a revisar",
     desc: "Publicaciones inactivas en ML que todavía tienen stock en Odoo (con el motivo de por qué están pausadas o cerradas), y publicaciones activas que no venden hace semanas o meses (configurable).",

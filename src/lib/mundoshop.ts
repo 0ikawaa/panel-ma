@@ -298,6 +298,192 @@ export async function msListActiveDetailed(
   return { items, total, fallidos };
 }
 
+// ---------------------------------------------------------------- experiencia
+
+// Un aspecto evaluado por /ml-experiencia/:id. Los nueve `item` que devuelve hoy
+// son: Health ML, Fotos, Descripcion, Video, Reviews, Envio gratis, Catalogo ML,
+// Carrito e Infracciones (sin tildes, tal cual los manda la API).
+export type MlCheck = {
+  item: string;
+  status: "ok" | "warn" | "bad";
+  detail: string; // texto libre, ej. "3 fotos", "187 chars — ampliar"
+};
+
+export type MlReview = {
+  rate: number; // 1..5
+  title: string;
+  content: string;
+  date: string | null; // ISO
+};
+
+// Respuesta de /ml-experiencia/:id: el puntaje 0–100 de experiencia de compra
+// con el detalle de los nueve aspectos que lo componen.
+export type MlExperiencia = {
+  id: string;
+  title: string;
+  status: string;
+  price: number | null;
+  permalink: string | null;
+  experience_score: number; // 0..100
+  experience_level: string; // EXCELENTE | BUENA | REGULAR | MALA
+  checks: MlCheck[];
+  reviews_summary: { total: number; avg: number | null; last_reviews: MlReview[] };
+  visits_30d: number | null;
+  sold_quantity: number | null;
+  available_quantity: number | null;
+};
+
+const CHECK_STATUS = new Set(["ok", "warn", "bad"]);
+
+/** Normaliza el JSON crudo de /ml-experiencia/:id (rellena nulos y arrays). */
+function toExperiencia(raw: Record<string, unknown>): MlExperiencia {
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+  const rawChecks = Array.isArray(raw.checks) ? (raw.checks as Record<string, unknown>[]) : [];
+  const rs = (raw.reviews_summary ?? {}) as Record<string, unknown>;
+  const rawReviews = Array.isArray(rs.last_reviews) ? (rs.last_reviews as Record<string, unknown>[]) : [];
+  return {
+    id: String(raw.id),
+    title: String(raw.title ?? ""),
+    status: String(raw.status ?? ""),
+    price: num(raw.price),
+    permalink: str(raw.permalink),
+    // Si la API no manda puntaje, 0 sería mentir; se toma -1 como "sin dato" y
+    // el reporte lo descarta. En la práctica siempre viene.
+    experience_score: num(raw.experience_score) ?? -1,
+    experience_level: String(raw.experience_level ?? ""),
+    checks: rawChecks.map((c) => ({
+      item: String(c.item ?? ""),
+      status: (CHECK_STATUS.has(String(c.status)) ? String(c.status) : "warn") as MlCheck["status"],
+      detail: String(c.detail ?? ""),
+    })),
+    reviews_summary: {
+      total: num(rs.total) ?? 0,
+      avg: num(rs.avg),
+      last_reviews: rawReviews.map((r) => ({
+        rate: num(r.rate) ?? 0,
+        title: String(r.title ?? "").trim(),
+        content: String(r.content ?? "").trim(),
+        date: str(r.date),
+      })),
+    },
+    visits_30d: num(raw.visits_30d),
+    sold_quantity: num(raw.sold_quantity),
+    available_quantity: num(raw.available_quantity),
+  };
+}
+
+/** Experiencia de compra de una publicación (/ml-experiencia/:id, live). */
+export async function msGetExperiencia(id: string, timeoutMs = 20000): Promise<MlExperiencia> {
+  const raw = await msGet<Record<string, unknown>>(`ml-experiencia/${id}`, timeoutMs);
+  return toExperiencia(raw);
+}
+
+// Reputación global del vendedor (/ml-reputacion). Los reclamos son del SELLER
+// completo (últimos 120 días): la API de ML no expone reclamos por publicación.
+export type MlMetrica = { cantidad: number; tasa: number | null; tasa_pct: string | null };
+
+export type MlReputacion = {
+  nivel: string | null; // ej. "5_green"
+  power_seller: string | null; // ej. "platinum"
+  ventas_totales: number | null;
+  ventas_completadas: number | null;
+  ventas_canceladas: number | null;
+  ratings: { positive: number | null; neutral: number | null; negative: number | null };
+  metricas_120d: {
+    ventas_completadas: number | null;
+    reclamos: MlMetrica;
+    demoras_despacho: MlMetrica;
+    cancelaciones: MlMetrica;
+  };
+};
+
+function toMetrica(raw: unknown): MlMetrica {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    cantidad: num(o.cantidad) ?? 0,
+    tasa: num(o.tasa),
+    tasa_pct: typeof o.tasa_pct === "string" ? o.tasa_pct : null,
+  };
+}
+
+/** Reputación global del vendedor (/ml-reputacion). */
+export async function msGetReputacion(timeoutMs = 20000): Promise<MlReputacion> {
+  const raw = await msGet<Record<string, unknown>>("ml-reputacion", timeoutMs);
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+  const ratings = (raw.ratings ?? {}) as Record<string, unknown>;
+  const m = (raw.metricas_120d ?? {}) as Record<string, unknown>;
+  return {
+    nivel: str(raw.nivel),
+    power_seller: str(raw.power_seller),
+    ventas_totales: num(raw.ventas_totales),
+    ventas_completadas: num(raw.ventas_completadas),
+    ventas_canceladas: num(raw.ventas_canceladas),
+    ratings: {
+      positive: num(ratings.positive),
+      neutral: num(ratings.neutral),
+      negative: num(ratings.negative),
+    },
+    metricas_120d: {
+      ventas_completadas: num(m.ventas_completadas),
+      reclamos: toMetrica(m.reclamos),
+      demoras_despacho: toMetrica(m.demoras_despacho),
+      cancelaciones: toMetrica(m.cancelaciones),
+    },
+  };
+}
+
+/**
+ * El `seller_sku` que devuelve ML no siempre es un SKU: en las publicaciones
+ * sincronizadas con el ERP viene un JSON como
+ * `{"PrId":"257","PrMPC":"1","SKU":"831-0"}`. Devuelve el SKU de adentro cuando
+ * es así, el string tal cual cuando ya es un SKU, y null cuando está vacío.
+ */
+export function parseSellerSku(raw: string | null | undefined): string | null {
+  const s = (raw ?? "").trim();
+  if (!s) return null;
+  if (s.startsWith("{")) {
+    try {
+      const o = JSON.parse(s) as Record<string, unknown>;
+      const inner = o.SKU ?? o.sku;
+      const v = typeof inner === "string" ? inner.trim() : "";
+      return v || null;
+    } catch {
+      return null; // JSON roto: mejor sin SKU que con basura
+    }
+  }
+  return s;
+}
+
+/**
+ * Trae TODAS las publicaciones activas con su experiencia de compra: enumera
+ * los ids con /ml-items (que además aporta thumbnail, seller_sku y tags, que la
+ * experiencia no devuelve) y pide /ml-experiencia/:id de cada una en paralelo
+ * (pool acotado). Las que fallan quedan con `exp: null` y se cuentan en
+ * `fallidos` para poder avisar que el reporte salió incompleto.
+ */
+export async function msListActiveExperiencia(
+  opts: { timeoutMs?: number; concurrency?: number } = {},
+): Promise<{ rows: { item: MlItem; exp: MlExperiencia | null }[]; total: number; fallidos: number }> {
+  const timeoutMs = opts.timeoutMs ?? 20000;
+  const { items, total } = await msListAllItems("active", { timeoutMs });
+  const exps = await mapPool(items, opts.concurrency ?? 24, (it) =>
+    msGetExperiencia(it.id, timeoutMs).catch(() => null),
+  );
+  let fallidos = 0;
+  const rows = items.map((item, i) => {
+    const exp = exps[i];
+    if (!exp || exp.experience_score < 0) {
+      fallidos += 1;
+      return { item, exp: null };
+    }
+    return { item, exp };
+  });
+  return { rows, total, fallidos };
+}
+
 type MlItemsPage = { paging?: { total?: number }; items?: MlItem[] };
 
 /**
