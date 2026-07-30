@@ -156,17 +156,37 @@ model ReportConfig {
   updatedAt  DateTime @updatedAt
 }
 
-/// Último puntaje de experiencia de compra conocido de una publicación de ML, y
-/// la marca de «bajó» que se muestra en el panel.
+/// Una captura de la experiencia de compra sacada del PANEL DE VENDEDOR de ML.
 ///
-/// Existe para poder COMPARAR: el puntaje lo calcula ML en el momento, así que
-/// sin guardar el anterior no hay forma de saber si una publicación empeoró. La
-/// primera corrida solo escribe la foto inicial y no avisa nada — si no, el
-/// primer mail serían cientos de publicaciones que ya venían flojas.
+/// Existe porque el dato no está en ninguna API: la documentación de MUNDO SHOP
+/// lo dice en sus notas («Reclamos: No disponible por API de ML, permiso no
+/// habilitado»). La captura se hace con el navegador contra el panel (ver el
+/// README), se importa y queda guardada acá; el reporte se arma leyendo la última.
 ///
-/// Los campos `bajo*` son la marca del panel: se llenan cuando el puntaje cae y
-/// se limpian cuando alguien la marca como vista o cuando la publicación
-/// recupera el puntaje que tenía.
+/// Se guardan TODAS las capturas, no solo la última, porque comparar dos
+/// capturas es lo único que permite saber qué SKU empeoró: los reclamos de la
+/// ventana de 180 días solo se leen como total, así que un salto entre capturas
+/// es un problema nuevo.
+model ExperienciaSnapshot {
+  id            String   @id @default(cuid())
+  capturadoEn   DateTime // cuándo se sacó del panel
+  importadoEn   DateTime @default(now())
+  importadoPor  String? // usuario que la subió
+  publicaciones Int // publicaciones que trae la captura
+  conDetalle    Int // cuántas traen el detalle de experiencia (las que están por debajo de 100)
+  skus          Int // SKU que quedan listados en el reporte
+  reclamos      Int // total de problemas de compradores informados
+  payload       Json // las publicaciones normalizadas (CapturaPub[])
+
+  @@index([capturadoEn])
+}
+
+/// LEGACY del reporte anterior de experiencia, que en realidad medía la CALIDAD
+/// de la ficha (9 aspectos de `/ml-experiencia/:id` de MUNDO SHOP) y no los
+/// problemas de los compradores. Ya no la escribe ni la lee nadie: el reporte
+/// vive en `ExperienciaSnapshot`. Se puede borrar cuando se quiera — queda por
+/// ahora para no tirar datos de producción en la misma migración que rehace el
+/// módulo.
 model ExperienciaScore {
   itemId    String   @id // id de la publicación (MLU...)
   sku       String? // SKU de la publicación, si tiene

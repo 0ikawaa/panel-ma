@@ -1,708 +1,747 @@
 import { describe, it, expect } from "vitest";
 import {
-  ASPECTOS,
   EXPERIENCIA_MAX,
-  PESO_TOTAL_ASPECTOS,
+  SEMAFORO_TEXTO,
+  TEXTO_SITUACION,
+  VENTANA_DIAS,
   agruparPorSku,
-  aspectoDe,
-  asuntoCaidas,
-  codigoBase,
-  confirmarPendientes,
-  cuerpoCaidas,
-  detectarCaidas,
+  asuntoCambios,
+  compararCapturas,
+  compararSkus,
+  cuerpoCambios,
   evaluarExperiencia,
+  experienciaEstado,
+  experienciaToText,
+  normalizarSku,
   normalizeExperienciaParams,
-  problemasDe,
+  parseCantidad,
+  parseCaptura,
+  parseResumen,
+  resumirExperiencia,
   semaforoDe,
-  toPublicacion,
-  type PubExperiencia,
-  type VentasReclamos,
+  type CapturaPub,
+  type ExperienciaSku,
 } from "./experiencia";
-import { parseSellerSku, type MlCheck, type MlExperiencia, type MlItem } from "./mundoshop";
 
 // ------------------------------------------------------------------- helpers
+//
+// Los textos son los que devuelve MercadoLibre de verdad: salieron de la captura
+// del panel del 29/07/2026 (249 publicaciones por debajo de 100).
 
-const check = (item: string, status: MlCheck["status"], detail = ""): MlCheck => ({ item, status, detail });
+const SOLUCION_PARTES =
+  "Revisa que lo que te compraron coincida con lo que envías, verifica que todo esté completo y que el embalaje esté en buen estado.";
+const SOLUCION_DAÑADO =
+  "Asegúrate de vender productos de buena calidad. Si tu producto tiene defectos de fábrica, reemplázalos lo antes posible.";
 
-/** Los nueve aspectos en verde: el punto de partida de una publicación perfecta. */
-const CHECKS_OK: MlCheck[] = ASPECTOS.map((a) => check(a.apiItem, "ok", "ok"));
-
-function mlItem(over: Partial<MlItem> = {}): MlItem {
+/** Una entrada del listado del panel, tal como viene en el JSON de la captura. */
+function crudoListado(over: Record<string, unknown> = {}) {
   return {
-    id: "MLU1",
-    title: "Producto X",
-    status: "active",
-    sub_status: [],
-    health: 1,
-    price: 500,
-    available_quantity: 10,
-    sold_quantity: 20,
-    listing_type: "gold_special",
-    catalog_listing: true,
-    permalink: "https://articulo.mercadolibre.com.uy/MLU-1",
-    thumbnail: "https://http2.mlstatic.com/x.jpg",
-    seller_sku: "48000-NEG-40",
-    tags: [],
+    id: "MLU869662504",
+    titulo: "Ropero 3 Puertas Corredizas Bariloche Dormitorio Con Espejo Color Blanco",
+    sku: "16214-BLA",
+    estado: "active",
+    catalogo: true,
+    stock: "161 u.",
+    precio: "$ 12.990",
+    cal: 93,
+    exp: 30,
+    expGoals: "Con problemas",
+    reco: "Mejora tu experiencia",
+    url: "https://www.mercadolibre.com.uy/publicaciones/MLU869662504/modificar",
     ...over,
   };
 }
 
-function mlExp(over: Partial<MlExperiencia> = {}): MlExperiencia {
+/** Una entrada del diagnóstico: la de arriba más el detalle `ml` de la pantalla. */
+function crudoDiagnostico(over: Record<string, unknown> = {}, ml: Record<string, unknown> = {}) {
   return {
-    id: "MLU1",
-    title: "Producto X",
-    status: "active",
-    price: 500,
-    permalink: "https://articulo.mercadolibre.com.uy/MLU-1",
-    experience_score: 100,
-    experience_level: "EXCELENTE",
-    checks: CHECKS_OK,
-    reviews_summary: { total: 10, avg: 4.5, last_reviews: [] },
-    visits_30d: 100,
-    sold_quantity: 20,
-    available_quantity: 10,
-    ...over,
+    ...crudoListado(over),
+    ml: {
+      score: 30,
+      nivel: "Mala",
+      color: "red",
+      resumen:
+        `En los últimos ${VENTANA_DIAS} días hiciste 422 ventas y tuviste 17 problemas. Revisa los consejos sobre cómo mejorar.`,
+      aviso: "Podríamos anular tu publicación si continúa brindando mala experiencia.",
+      dist: ["Con el producto entregado: 100%"],
+      problemas: [
+        {
+          codigo: "good_packing_but_missing_accessories",
+          categoria: "Faltaban partes o accesorios del producto",
+          detalle: "El embalaje llegó bien pero faltaban partes o accesorios del producto",
+          cantidad: "8 problemas",
+          principal: true,
+          reclamos: 8,
+          cancelaciones: 0,
+          solucion: SOLUCION_PARTES,
+          accion: "Modificar publicación",
+        },
+        {
+          codigo: "good_packing_but_product_broken",
+          categoria: "El producto estaba dañado",
+          detalle: "El embalaje llegó bien pero el producto estaba dañado",
+          cantidad: "6 problemas",
+          principal: false,
+          reclamos: 6,
+          cancelaciones: 1,
+          solucion: SOLUCION_DAÑADO,
+          accion: "Pausar desde el listado",
+        },
+        {
+          codigo: "different_from_ordered",
+          categoria: "Era diferente a lo pedido",
+          detalle: "El comprador recibió otro tipo de producto",
+          cantidad: "3 problemas",
+          principal: false,
+          reclamos: 3,
+          cancelaciones: 0,
+          solucion: "Asegúrate de que tu publicación coincida con el producto que envías.",
+          accion: "Modificar publicación",
+        },
+      ],
+      ...ml,
+    },
   };
 }
 
-/** Publicación ya evaluada, para los tests de agrupado y caídas. */
-function pub(over: Partial<PubExperiencia> = {}): PubExperiencia {
-  return {
-    id: "MLU1",
-    titulo: "Producto X",
-    sku: "48000-NEG-40",
-    permalink: null,
-    thumbnail: null,
-    score: 60,
-    nivel: "BUENA",
-    semaforo: "amarillo",
-    precio: 500,
-    disponibles: 10,
-    vendidasHistorico: 20,
-    visitas30d: 50,
-    reviews: { total: 5, promedio: 4 },
-    problemas: [],
-    ...over,
-  };
-}
+const params = normalizeExperienciaParams(null);
+const opts = {
+  capturadoEn: "2026-07-29T20:53:00.000Z",
+  generadoEn: "2026-07-30T12:00:00.000Z",
+  params,
+};
 
-// -------------------------------------------------------------------- aspectos
+// ------------------------------------------------------------- parseCantidad
 
-describe("catálogo de aspectos", () => {
-  it("los nueve aspectos suman exactamente 100 puntos", () => {
-    expect(PESO_TOTAL_ASPECTOS).toBe(EXPERIENCIA_MAX);
-    expect(ASPECTOS).toHaveLength(9);
+describe("parseCantidad", () => {
+  it("lee las dos formas que usa ML", () => {
+    expect(parseCantidad("8 problemas")).toBe(8);
+    expect(parseCantidad("1 problema")).toBe(1);
   });
 
-  it("todos los aspectos traen una recomendación concreta", () => {
-    for (const a of ASPECTOS) {
-      expect(a.comoMejorar.length).toBeGreaterThan(30);
-      expect(a.label).not.toBe("");
-    }
+  it("entiende la cantidad escrita en palabras", () => {
+    expect(parseCantidad("un problema")).toBe(1);
+    expect(parseCantidad("una venta")).toBe(1);
   });
 
-  it("encuentra el aspecto por el nombre que manda la API, sin importar el caso", () => {
-    expect(aspectoDe("Health ML").code).toBe("health");
-    expect(aspectoDe("  envio gratis  ").code).toBe("envio_gratis");
-    expect(aspectoDe("Catalogo ML").peso).toBe(10);
-  });
-
-  it("un aspecto que ML agregue no se pierde: queda como desconocido con peso 0", () => {
-    const a = aspectoDe("Preguntas sin responder");
-    expect(a.code).toBe("otro:preguntas_sin_responder");
-    expect(a.peso).toBe(0);
-    expect(a.label).toBe("Preguntas sin responder");
+  it("aguanta el separador de miles y la basura", () => {
+    expect(parseCantidad("1.234 problemas")).toBe(1234);
+    expect(parseCantidad("")).toBe(0);
+    expect(parseCantidad(null)).toBe(0);
+    expect(parseCantidad("sin datos")).toBe(0);
   });
 });
 
-// ------------------------------------------------------------------- problemas
+// -------------------------------------------------------------- parseResumen
 
-describe("problemasDe", () => {
-  it("una publicación con los nueve aspectos en verde no tiene problemas", () => {
-    expect(problemasDe(CHECKS_OK)).toHaveLength(0);
+describe("parseResumen", () => {
+  it("saca ventas y problemas del texto del panel", () => {
+    const r = parseResumen(
+      "En los últimos 180 días hiciste 422 ventas y tuviste 17 problemas. Revisa los consejos sobre cómo mejorar.",
+    );
+    expect(r).toEqual({ ventas180d: 422, problemas180d: 17, situacion: "con-problemas" });
   });
 
-  it("las infracciones van primero aunque valgan menos puntos que el resto", () => {
-    const problemas = problemasDe([
-      check("Health ML", "warn", "75%"),
-      check("Infracciones", "bad", "tiene infracciones pendientes"),
-      check("Envio gratis", "bad", "no tiene"),
-    ]);
-    expect(problemas[0].code).toBe("infracciones");
+  it("entiende «un problema» y «una venta» en singular", () => {
+    expect(
+      parseResumen(
+        "En los últimos 180 días hiciste una venta y tuviste un problema. Para calcular la experiencia que brindas, consideramos también tu desempeño en otras publicaciones de la misma categoría.",
+      ),
+    ).toEqual({ ventas180d: 1, problemas180d: 1, situacion: "con-problemas" });
   });
 
-  it("sin infracciones ordena por puntos en juego", () => {
-    const problemas = problemasDe([
-      check("Video", "warn", "sin video"), // 5 × 0.5 = 2.5
-      check("Envio gratis", "bad", "no tiene"), // 10 × 1 = 10
-      check("Health ML", "warn", "80%"), // 25 × 0.5 = 12.5
-    ]);
-    expect(problemas.map((p) => p.code)).toEqual(["health", "envio_gratis", "video"]);
+  it("distingue «sin problemas» de «sin ventas», que no es lo mismo", () => {
+    // Vendió y no tuvo problemas: no hay nada que arreglar, pero ML no dice cuánto vendió.
+    expect(parseResumen("No tuviste problemas con este producto.")).toEqual({
+      ventas180d: null,
+      problemas180d: 0,
+      situacion: "sin-problemas",
+    });
+    // Sin ventas ML no calcula nada: el SKU no tiene puntaje que mejorar.
+    expect(
+      parseResumen(
+        "Aún no la calculamos porque tu publicación no tuvo ventas en los últimos 180 días.",
+      ),
+    ).toEqual({ ventas180d: 0, problemas180d: 0, situacion: "sin-ventas" });
   });
 
-  it("un aspecto en bad pone en juego todo su peso y en warn la mitad", () => {
-    const [bad] = problemasDe([check("Fotos", "bad", "1 fotos — minimo 6")]);
-    const [warn] = problemasDe([check("Fotos", "warn", "3 fotos")]);
-    expect(bad.puntosEnJuego).toBe(15);
-    expect(warn.puntosEnJuego).toBe(7.5);
-  });
-
-  it("arrastra el detalle que informa ML y la recomendación del aspecto", () => {
-    const [p] = problemasDe([check("Descripcion", "warn", "187 chars — ampliar")]);
-    expect(p.detalle).toBe("187 chars — ampliar");
-    expect(p.comoMejorar).toContain("500 caracteres");
+  it("no inventa un cero cuando el texto vino vacío o desconocido", () => {
+    expect(parseResumen("")).toEqual({
+      ventas180d: null,
+      problemas180d: null,
+      situacion: "sin-datos",
+    });
+    expect(parseResumen(null).situacion).toBe("sin-datos");
+    expect(parseResumen("Texto nuevo que ML todavía no usaba").situacion).toBe("sin-datos");
   });
 });
 
-// -------------------------------------------------------------------- semáforo
+// --------------------------------------------------------------- parseCaptura
+
+describe("parseCaptura", () => {
+  it("normaliza una entrada del listado", () => {
+    const [p] = parseCaptura([crudoListado()]);
+    expect(p.id).toBe("MLU869662504");
+    expect(p.sku).toBe("16214-BLA");
+    expect(p.experiencia).toBe(30);
+    expect(p.calidad).toBe(93);
+    expect(p.catalogo).toBe(true);
+    expect(p.detalle).toBeNull(); // el listado no trae el detalle
+  });
+
+  it("parsea el detalle y ordena los problemas con el principal primero", () => {
+    const [p] = parseCaptura([crudoDiagnostico()]);
+    expect(p.detalle?.nivel).toBe("Mala");
+    expect(p.detalle?.ventas180d).toBe(422);
+    expect(p.detalle?.problemas180d).toBe(17);
+    expect(p.detalle?.situacion).toBe("con-problemas");
+    expect(p.detalle?.problemas[0].principal).toBe(true);
+    expect(p.detalle?.problemas[0].cantidad).toBe(8);
+    expect(p.detalle?.problemas[0].comoMejorar).toBe(SOLUCION_PARTES);
+  });
+
+  it("mergea el listado con el diagnóstico por id de publicación", () => {
+    // Así llega de verdad: el listado trae las 2200 con su %, el diagnóstico solo
+    // el detalle de las que están por debajo de 100.
+    const pubs = parseCaptura(
+      [crudoListado(), crudoListado({ id: "MLU2", sku: "99999", exp: 100 })],
+      [{ id: crudoListado().id, ml: crudoDiagnostico().ml }],
+    );
+    expect(pubs).toHaveLength(2);
+    const conDetalle = pubs.find((p) => p.id === "MLU869662504");
+    expect(conDetalle?.experiencia).toBe(30); // vino del listado
+    expect(conDetalle?.detalle?.problemas).toHaveLength(3); // vino del diagnóstico
+    expect(pubs.find((p) => p.id === "MLU2")?.detalle).toBeNull();
+  });
+
+  it("trata el -1 de ML como «no hay puntaje»", () => {
+    const [p] = parseCaptura([
+      crudoDiagnostico({}, {
+        score: -1,
+        nivel: "",
+        resumen: `Aún no la calculamos porque tu publicación no tuvo ventas en los últimos ${VENTANA_DIAS} días.`,
+        problemas: [],
+      }),
+    ]);
+    expect(p.detalle?.score).toBeNull();
+    expect(p.detalle?.nivel).toBeNull();
+    expect(p.detalle?.situacion).toBe("sin-ventas");
+  });
+
+  it("descarta lo que no tiene id y aguanta basura", () => {
+    expect(parseCaptura([{ titulo: "sin id" }, null, 42, "x"], null, undefined)).toEqual([]);
+  });
+
+  it("normaliza el SKU a mayúsculas para que agrupe parejo", () => {
+    expect(normalizarSku(" 16214-bla ")).toBe("16214-BLA");
+    expect(normalizarSku("")).toBeNull();
+    expect(normalizarSku(undefined)).toBeNull();
+  });
+});
+
+// ------------------------------------------------------------------ semáforo
 
 describe("semaforoDe", () => {
-  it("usa los mismos cortes que los niveles de ML", () => {
-    expect(semaforoDe(100)).toBe("verde");
-    expect(semaforoDe(80)).toBe("verde");
-    expect(semaforoDe(79)).toBe("amarillo");
-    expect(semaforoDe(60)).toBe("amarillo");
-    expect(semaforoDe(59)).toBe("naranja");
-    expect(semaforoDe(40)).toBe("naranja");
-    expect(semaforoDe(39)).toBe("rojo");
+  it("marca rojo hasta 30, que es donde ML avisa que puede pausar", () => {
+    expect(semaforoDe(30)).toBe("rojo");
     expect(semaforoDe(0)).toBe("rojo");
+    expect(semaforoDe(31)).toBe("amarillo");
+  });
+
+  it("solo el 100 es verde", () => {
+    expect(semaforoDe(99)).toBe("amarillo");
+    expect(semaforoDe(EXPERIENCIA_MAX)).toBe("verde");
+  });
+
+  it("sin dato va amarillo: no saber es peor que estar en 100", () => {
+    expect(semaforoDe(null)).toBe("amarillo");
   });
 });
 
-// ---------------------------------------------------------------- SKU y grupos
-
-describe("codigoBase", () => {
-  it("recorta la variante y el talle", () => {
-    expect(codigoBase("48000-NEG-40")).toBe("48000");
-    expect(codigoBase("22108-BEI")).toBe("22108");
-    expect(codigoBase("23019")).toBe("23019");
-    expect(codigoBase("16214-BLA")).toBe("16214");
-  });
-
-  it("normaliza a mayúsculas y limpia espacios", () => {
-    expect(codigoBase(" 48000-neg ")).toBe("48000");
-    expect(codigoBase("ab12/x")).toBe("AB12");
-  });
-});
-
-describe("parseSellerSku", () => {
-  it("devuelve el SKU tal cual cuando ya es un SKU", () => {
-    expect(parseSellerSku("48000-NEG-40")).toBe("48000-NEG-40");
-  });
-
-  it("saca el SKU de adentro del JSON que manda el ERP", () => {
-    expect(parseSellerSku('{"PrId":"257","PrMPC":"1","SKU":"831-0"}')).toBe("831-0");
-  });
-
-  it("vacío, nulo o JSON roto no dan SKU", () => {
-    expect(parseSellerSku(null)).toBeNull();
-    expect(parseSellerSku("   ")).toBeNull();
-    expect(parseSellerSku('{"PrId":"1"')).toBeNull();
-    expect(parseSellerSku('{"PrId":"1"}')).toBeNull();
-  });
-});
+// ------------------------------------------------------------- agruparPorSku
 
 describe("agruparPorSku", () => {
-  it("junta las variantes del mismo código base en una sola fila", () => {
-    const items = agruparPorSku([
-      pub({ id: "MLU1", sku: "48000-NEG-40", score: 70 }),
-      pub({ id: "MLU2", sku: "48000-BLA-41", score: 45 }),
-      pub({ id: "MLU3", sku: "22108-BEI", score: 65 }),
+  it("cuenta los reclamos UNA vez por SKU y no los suma entre publicaciones hermanas", () => {
+    // Dos publicaciones del mismo SKU: ML les informa los mismos 17 problemas.
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1" }),
+      crudoDiagnostico({ id: "MLU2" }),
     ]);
-    expect(items).toHaveLength(2);
-    const g48 = items.find((i) => i.codigo === "48000")!;
-    expect(g48.publicaciones).toHaveLength(2);
-    expect(g48.skus).toEqual(["48000-BLA-41", "48000-NEG-40"]);
+    const [sku] = agruparPorSku(pubs);
+    expect(sku.publicaciones).toHaveLength(2);
+    expect(sku.reclamos).toBe(17); // 8 + 6 + 3, no el doble
+    expect(sku.ventas180d).toBe(422);
+    expect(sku.problemas180d).toBe(17);
   });
 
-  it("el semáforo lo manda la publicación más floja del grupo", () => {
-    const [g] = agruparPorSku([
-      pub({ id: "MLU1", sku: "48000-NEG", score: 75 }),
-      pub({ id: "MLU2", sku: "48000-BLA", score: 30 }),
+  it("no une variantes distintas del mismo código padre", () => {
+    // ML calcula la experiencia por producto: "16214-BLA" y "16214-NOG" son dos.
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", sku: "16214-BLA" }),
+      crudoDiagnostico({ id: "MLU2", sku: "16214-NOG" }),
     ]);
-    expect(g.scorePeor).toBe(30);
-    expect(g.scorePromedio).toBe(53); // (75+30)/2 = 52.5 → 53
-    expect(g.semaforo).toBe("rojo");
-    expect(g.publicaciones[0].id).toBe("MLU2"); // la peor primero
+    expect(agruparPorSku(pubs).map((s) => s.sku).sort()).toEqual(["16214-BLA", "16214-NOG"]);
   });
 
-  it("una publicación sin SKU queda en su propio grupo, identificada por el MLU", () => {
-    const items = agruparPorSku([pub({ id: "MLU9", sku: null })]);
-    expect(items).toHaveLength(1);
-    expect(items[0].codigo).toBe("MLU9");
-    expect(items[0].sinSku).toBe(true);
-    expect(items[0].skus).toEqual([]);
+  it("deja cada publicación sin SKU como su propia fila", () => {
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", sku: "" }),
+      crudoDiagnostico({ id: "MLU2", sku: null }),
+    ]);
+    const grupos = agruparPorSku(pubs);
+    expect(grupos).toHaveLength(2);
+    expect(grupos.every((g) => g.sinSku)).toBe(true);
+    expect(grupos.map((g) => g.clave).sort()).toEqual(["MLU1", "MLU2"]);
   });
 
-  it("no marca sinSku si al menos una publicación del grupo tiene SKU", () => {
-    const [g] = agruparPorSku([
-      pub({ id: "MLU1", sku: "48000-NEG" }),
-      pub({ id: "MLU2", sku: "48000-BLA" }),
+  it("elige la hermana que más información trae", () => {
+    // Pasa de verdad: a una publicación del par no se le pudo leer el detalle.
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1" }),
+      crudoDiagnostico({ id: "MLU2" }, { resumen: "", problemas: [], score: null, nivel: "" }),
     ]);
-    expect(g.sinSku).toBe(false);
+    const [sku] = agruparPorSku(pubs);
+    expect(sku.reclamos).toBe(17);
+    expect(sku.situacion).toBe("con-problemas");
   });
 
-  it("cuenta a cuántas publicaciones del grupo afecta cada problema", () => {
-    const conVideo = problemasDe([check("Video", "warn", "sin video")]);
-    const conVideoYFotos = problemasDe([
-      check("Video", "warn", "sin video"),
-      check("Fotos", "bad", "1 fotos — minimo 6"),
+  it("toma el peor % del listado entre las hermanas", () => {
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", exp: 75 }),
+      crudoDiagnostico({ id: "MLU2", exp: 30 }),
     ]);
-    const [g] = agruparPorSku([
-      pub({ id: "MLU1", sku: "48000-NEG", problemas: conVideo }),
-      pub({ id: "MLU2", sku: "48000-BLA", problemas: conVideoYFotos }),
-    ]);
-    const video = g.problemas.find((p) => p.code === "video")!;
-    const fotos = g.problemas.find((p) => p.code === "fotos")!;
-    expect(video.publicaciones).toBe(2);
-    expect(fotos.publicaciones).toBe(1);
-    // Fotos (15 pts en bad) pesa más que Video (5 en warn), así que va primero.
-    expect(g.problemaPrincipal?.code).toBe("fotos");
+    expect(agruparPorSku(pubs)[0].experiencia).toBe(30);
   });
 
-  it("cuando un aspecto está peor en una publicación, el grupo muestra el peor caso", () => {
-    const [g] = agruparPorSku([
-      pub({ id: "MLU1", sku: "48000-NEG", problemas: problemasDe([check("Fotos", "warn", "3 fotos")]) }),
-      pub({ id: "MLU2", sku: "48000-BLA", problemas: problemasDe([check("Fotos", "bad", "1 fotos")]) }),
-    ]);
-    const fotos = g.problemas.find((p) => p.code === "fotos")!;
-    expect(fotos.status).toBe("bad");
-    expect(fotos.publicaciones).toBe(2);
+  it("expone el problema principal y su consejo de ML", () => {
+    const [sku] = agruparPorSku(parseCaptura([crudoDiagnostico()]));
+    expect(sku.problemaPrincipal?.categoria).toBe("Faltaban partes o accesorios del producto");
+    expect(sku.problemaPrincipalTexto).toBe("Faltaban partes o accesorios del producto");
+    expect(sku.comoMejorar).toBe(SOLUCION_PARTES);
+    expect(sku.tiposProblema).toBe(3);
+    expect(sku.cancelaciones).toBe(1);
   });
 
-  it("pega las ventas del SKU unificado y promedia las estrellas ponderando por opiniones", () => {
-    const ventas = new Map<string, VentasReclamos>([
-      ["48000", { unidades30d: 12, unidades90d: 30, ordenes90d: 25, canceladas90d: 2, reclamos90d: 1 }],
-    ]);
-    const [g] = agruparPorSku(
-      [
-        pub({ id: "MLU1", sku: "48000-NEG", reviews: { total: 10, promedio: 5 }, visitas30d: 40 }),
-        pub({ id: "MLU2", sku: "48000-BLA", reviews: { total: 10, promedio: 3 }, visitas30d: 60 }),
-      ],
-      ventas,
-    );
-    expect(g.ventas.unidades30d).toBe(12);
-    expect(g.ventas.canceladas90d).toBe(2);
-    expect(g.reviews).toEqual({ total: 20, promedio: 4 });
-    expect(g.visitas30d).toBe(100);
+  it("explica en la columna por qué un SKU no tiene problema principal", () => {
+    const sinProblemas = agruparPorSku(
+      parseCaptura([
+        crudoDiagnostico({}, { resumen: "No tuviste problemas con este producto.", problemas: [] }),
+      ]),
+    )[0];
+    expect(sinProblemas.problemaPrincipal).toBeNull();
+    expect(sinProblemas.problemaPrincipalTexto).toBe(TEXTO_SITUACION["sin-problemas"]);
+
+    const sinVentas = agruparPorSku(
+      parseCaptura([
+        crudoDiagnostico({}, {
+          resumen: `Aún no la calculamos porque tu publicación no tuvo ventas en los últimos ${VENTANA_DIAS} días.`,
+          problemas: [],
+          score: -1,
+        }),
+      ]),
+    )[0];
+    expect(sinVentas.problemaPrincipalTexto).toBe(TEXTO_SITUACION["sin-ventas"]);
   });
 
-  it("un SKU sin ventas registradas queda en cero, no en undefined", () => {
-    const [g] = agruparPorSku([pub({ sku: "99999-XXX" })]);
-    expect(g.ventas.unidades30d).toBe(0);
-    expect(g.ventas.reclamos90d).toBe(0);
+  it("usa las ventas de nuestra base cuando ML no las informa", () => {
+    const pubs = parseCaptura([
+      crudoDiagnostico({}, { resumen: "No tuviste problemas con este producto.", problemas: [] }),
+    ]);
+    const [sku] = agruparPorSku(pubs, new Map([["16214-BLA", 137]]));
+    expect(sku.ventas180d).toBeNull(); // ML no dijo nada
+    expect(sku.ventasBd180d).toBe(137);
   });
 
-  it("prioriza lo que tiene más para recuperar y más movimiento", () => {
-    const items = agruparPorSku([
-      // Muy floja pero que nadie mira.
-      pub({ id: "MLU1", sku: "111-A", score: 20, visitas30d: 0 }),
-      // Menos floja pero con mucho tráfico.
-      pub({ id: "MLU2", sku: "222-A", score: 55, visitas30d: 5000 }),
-    ]);
-    expect(items[0].codigo).toBe("222");
+  it("no le pega ventas de la base a las publicaciones sin SKU", () => {
+    const pubs = parseCaptura([crudoDiagnostico({ sku: "" })]);
+    expect(agruparPorSku(pubs, new Map([["16214-BLA", 137]]))[0].ventasBd180d).toBeNull();
   });
 });
 
-// ------------------------------------------------------------- toPublicacion
+// -------------------------------------------------------------- compararSkus
 
-describe("toPublicacion", () => {
-  it("arma la publicación combinando el item de la lista y su experiencia", () => {
-    const p = toPublicacion(
-      mlItem({ seller_sku: '{"PrId":"257","SKU":"831-0"}' }),
-      mlExp({ experience_score: 45, experience_level: "REGULAR", checks: [check("Video", "warn", "sin video")] }),
-    );
-    expect(p.sku).toBe("831-0");
-    expect(p.score).toBe(45);
-    expect(p.nivel).toBe("REGULAR");
-    expect(p.semaforo).toBe("naranja");
-    expect(p.problemas).toHaveLength(1);
-    expect(p.thumbnail).toBe("https://http2.mlstatic.com/x.jpg"); // solo lo trae la lista
+describe("compararSkus", () => {
+  const sku = (over: Partial<ExperienciaSku>): ExperienciaSku =>
+    ({
+      clave: "X",
+      sku: "X",
+      sinSku: false,
+      titulo: "t",
+      experiencia: 65,
+      semaforo: "amarillo",
+      nivel: "Media",
+      score: 65,
+      situacion: "con-problemas",
+      ventas180d: 0,
+      ventasBd180d: null,
+      problemas180d: 0,
+      reclamos: 0,
+      cancelaciones: 0,
+      tiposProblema: 0,
+      problemaPrincipal: null,
+      problemaPrincipalTexto: "",
+      comoMejorar: null,
+      problemas: [],
+      dist: [],
+      aviso: null,
+      publicaciones: [],
+      ...over,
+    }) as ExperienciaSku;
+
+  it("pone los rojos primero, incluso con menos reclamos", () => {
+    const rojo = sku({ clave: "rojo", semaforo: "rojo", reclamos: 1 });
+    const amarillo = sku({ clave: "amarillo", reclamos: 9 });
+    expect([amarillo, rojo].sort(compararSkus).map((s) => s.clave)).toEqual(["rojo", "amarillo"]);
   });
 
-  it("si ML no manda el nivel, se deduce del puntaje", () => {
-    const p = toPublicacion(mlItem(), mlExp({ experience_score: 30, experience_level: "" }));
-    expect(p.nivel).toBe("MALA");
+  it("a igual semáforo manda el que más reclamos tiene", () => {
+    const a = sku({ clave: "a", reclamos: 2 });
+    const b = sku({ clave: "b", reclamos: 7 });
+    expect([a, b].sort(compararSkus).map((s) => s.clave)).toEqual(["b", "a"]);
   });
 
-  it("sin seller_sku toma el SKU del puente de ventas", () => {
-    const puente = new Map([["MLU7", "16214-BLA"]]);
-    const p = toPublicacion(mlItem({ id: "MLU7", seller_sku: null }), mlExp({ id: "MLU7" }), puente);
-    expect(p.sku).toBe("16214-BLA");
-  });
-
-  it("el seller_sku de ML le gana al puente", () => {
-    const puente = new Map([["MLU7", "99999-VIEJO"]]);
-    const p = toPublicacion(
-      mlItem({ id: "MLU7", seller_sku: "16214-BLA" }),
-      mlExp({ id: "MLU7" }),
-      puente,
-    );
-    expect(p.sku).toBe("16214-BLA");
-  });
-
-  it("sin seller_sku ni puente la publicación queda sin SKU", () => {
-    const p = toPublicacion(mlItem({ id: "MLU7", seller_sku: null }), mlExp({ id: "MLU7" }), new Map());
-    expect(p.sku).toBeNull();
+  it("a igual reclamos manda el que más vende", () => {
+    const poco = sku({ clave: "poco", reclamos: 2, ventas180d: 5 });
+    const mucho = sku({ clave: "mucho", reclamos: 2, ventas180d: 400 });
+    expect([poco, mucho].sort(compararSkus).map((s) => s.clave)).toEqual(["mucho", "poco"]);
   });
 });
 
-// --------------------------------------------------------------------- reporte
+// ---------------------------------------------------------- evaluarExperiencia
 
 describe("evaluarExperiencia", () => {
-  const opts = { generadoEn: "2026-07-29T12:00:00.000Z", params: normalizeExperienciaParams(null) };
+  it("deja afuera lo que ya está en 100", () => {
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", sku: "A", exp: 30 }),
+      crudoListado({ id: "MLU2", sku: "B", exp: 100 }),
+    ]);
+    const rep = evaluarExperiencia(pubs, opts);
+    expect(rep.items.map((i) => i.sku)).toEqual(["A"]);
+    expect(rep.summary.publicacionesCapturadas).toBe(2); // el total sí se informa
+    expect(rep.summary.publicaciones).toBe(1);
+  });
 
-  it("deja afuera las perfectas y las cuenta aparte", () => {
-    const r = evaluarExperiencia(
-      [
-        { item: mlItem({ id: "MLU1", seller_sku: "111-A" }), exp: mlExp({ id: "MLU1", experience_score: 100 }) },
-        {
-          item: mlItem({ id: "MLU2", seller_sku: "222-A" }),
-          exp: mlExp({ id: "MLU2", experience_score: 60, checks: [check("Video", "warn", "sin video")] }),
-        },
-      ],
-      opts,
+  it("deja afuera las que ML no puntuó, pero dice cuántas son", () => {
+    // El -1 del listado no es un puntaje malísimo: es «no lo calculé porque no
+    // vendiste». Meterlas las mostraría como las peores del catálogo.
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", sku: "A", exp: 30 }),
+      crudoListado({ id: "MLU2", sku: "B", exp: -1 }),
+      crudoListado({ id: "MLU3", sku: "C", exp: null }),
+    ]);
+    const rep = evaluarExperiencia(pubs, opts);
+    expect(rep.items.map((i) => i.sku)).toEqual(["A"]);
+    expect(rep.summary.sinPuntaje).toBe(1); // el -1
+    expect(rep.summary.noLeidas).toBe(1); // la que no se pudo leer
+    expect(rep.summary.publicacionesCapturadas).toBe(3);
+  });
+
+  it("el -1 no llega al reporte ni como experiencia ni como semáforo", () => {
+    const [p] = parseCaptura([crudoListado({ exp: -1 })]);
+    expect(p.experiencia).toBeNull();
+    expect(p.sinCalcular).toBe(true);
+    const [q] = parseCaptura([crudoListado({ exp: null })]);
+    expect(q.experiencia).toBeNull();
+    expect(q.sinCalcular).toBe(false); // no es lo mismo: esta no se pudo leer
+  });
+
+  it("el listado no le pisa el puntaje al diagnóstico cuando manda -1", () => {
+    // Pasó de verdad: una publicación quedó en -1 en el listado y con detalle en
+    // el diagnóstico. Si el -1 pisara el 30, el SKU desaparecía del reporte.
+    const pubs = parseCaptura(
+      [crudoListado({ id: "MLU1", exp: 30 })],
+      [crudoListado({ id: "MLU1", exp: -1 })],
     );
-    expect(r.summary.activas).toBe(2);
-    expect(r.summary.perfectas).toBe(1);
-    expect(r.summary.aMejorar).toBe(1);
-    expect(r.items).toHaveLength(1);
-    expect(r.items[0].codigo).toBe("222");
+    expect(pubs[0].experiencia).toBe(30);
+    expect(evaluarExperiencia(pubs, opts).items).toHaveLength(1);
   });
 
-  it("las publicaciones cuya experiencia no se pudo leer no se evalúan", () => {
-    const r = evaluarExperiencia(
-      [
-        { item: mlItem({ id: "MLU1" }), exp: null },
-        { item: mlItem({ id: "MLU2", seller_sku: "222-A" }), exp: mlExp({ id: "MLU2", experience_score: 50 }) },
-      ],
-      { ...opts, fallidos: 1 },
-    );
-    expect(r.summary.activas).toBe(1);
-    expect(r.fallidos).toBe(1);
-  });
-
-  it("suma los puntos en juego y reparte el semáforo", () => {
-    const r = evaluarExperiencia(
-      [
-        { item: mlItem({ id: "MLU1", seller_sku: "111-A" }), exp: mlExp({ id: "MLU1", experience_score: 30 }) },
-        { item: mlItem({ id: "MLU2", seller_sku: "222-A" }), exp: mlExp({ id: "MLU2", experience_score: 50 }) },
-        { item: mlItem({ id: "MLU3", seller_sku: "333-A" }), exp: mlExp({ id: "MLU3", experience_score: 70 }) },
-      ],
-      opts,
-    );
-    expect(r.summary.rojo).toBe(1);
-    expect(r.summary.naranja).toBe(1);
-    expect(r.summary.amarillo).toBe(1);
-    expect(r.summary.puntosEnJuego).toBe(70 + 50 + 30);
-    expect(r.summary.scorePromedio).toBe(50);
-  });
-
-  it("cuenta los SKU con infracciones", () => {
-    const r = evaluarExperiencia(
-      [
-        {
-          item: mlItem({ id: "MLU1", seller_sku: "111-A" }),
-          exp: mlExp({ id: "MLU1", experience_score: 50, checks: [check("Infracciones", "bad", "tiene")] }),
-        },
-      ],
-      opts,
-    );
-    expect(r.summary.conInfracciones).toBe(1);
-  });
-
-  it("un umbral más bajo lista solo lo que está peor que eso", () => {
-    const rows = [
-      { item: mlItem({ id: "MLU1", seller_sku: "111-A" }), exp: mlExp({ id: "MLU1", experience_score: 85 }) },
-      { item: mlItem({ id: "MLU2", seller_sku: "222-A" }), exp: mlExp({ id: "MLU2", experience_score: 40 }) },
-    ];
-    const r = evaluarExperiencia(rows, { ...opts, params: { umbral: 60, minCaida: 5 } });
-    expect(r.items).toHaveLength(1);
-    expect(r.items[0].codigo).toBe("222");
-  });
-
-  it("el puente item→SKU permite unificar publicaciones que ML devuelve sin seller_sku", () => {
-    const rows = [
-      { item: mlItem({ id: "MLU1", seller_sku: null }), exp: mlExp({ id: "MLU1", experience_score: 60 }) },
-      { item: mlItem({ id: "MLU2", seller_sku: null }), exp: mlExp({ id: "MLU2", experience_score: 40 }) },
-    ];
-    // Sin puente: dos grupos sueltos identificados por el MLU.
-    const sinPuente = evaluarExperiencia(rows, opts);
-    expect(sinPuente.items).toHaveLength(2);
-    expect(sinPuente.items.every((i) => i.sinSku)).toBe(true);
-
-    // Con puente: las dos son variantes del mismo código base.
-    const conPuente = evaluarExperiencia(rows, {
+  it("respeta el umbral configurado", () => {
+    const pubs = parseCaptura([
+      crudoDiagnostico({ id: "MLU1", sku: "A", exp: 30 }),
+      crudoDiagnostico({ id: "MLU2", sku: "B", exp: 75 }),
+    ]);
+    const rep = evaluarExperiencia(pubs, {
       ...opts,
-      skuPorItem: new Map([
-        ["MLU1", "48000-NEG"],
-        ["MLU2", "48000-BLA"],
-      ]),
+      params: normalizeExperienciaParams({ umbral: 50 }),
     });
-    expect(conPuente.items).toHaveLength(1);
-    expect(conPuente.items[0].codigo).toBe("48000");
-    expect(conPuente.items[0].publicaciones).toHaveLength(2);
-    expect(conPuente.items[0].sinSku).toBe(false);
+    expect(rep.items.map((i) => i.sku)).toEqual(["A"]);
   });
 
-  it("sin reclamos por SKU el flag queda en false para poder avisarlo", () => {
-    const r = evaluarExperiencia([], opts);
-    expect(r.reclamosPorSkuDisponibles).toBe(false);
-    expect(r.summary.scorePromedio).toBeNull();
+  it("conserva de qué captura salió", () => {
+    const rep = evaluarExperiencia(parseCaptura([crudoDiagnostico()]), opts);
+    expect(rep.capturadoEn).toBe(opts.capturadoEn);
+    expect(rep.generadoEn).toBe(opts.generadoEn);
   });
 });
 
-// ------------------------------------------------------------------- params
+// ------------------------------------------------------- resumirExperiencia
+
+describe("resumirExperiencia", () => {
+  const armar = () => {
+    const pubs = parseCaptura([
+      // rojo con 17 reclamos, problema principal "faltaban partes"
+      crudoDiagnostico({ id: "MLU1", sku: "A", exp: 30 }),
+      // otro con el mismo problema principal, 1 reclamo
+      crudoDiagnostico({ id: "MLU2", sku: "B", exp: 65 }, {
+        score: 65,
+        nivel: "Media",
+        resumen: `En los últimos ${VENTANA_DIAS} días hiciste 100 ventas y tuviste un problema. Revisa los consejos sobre cómo mejorar.`,
+        problemas: [
+          {
+            codigo: "good_packing_but_missing_accessories",
+            categoria: "Faltaban partes o accesorios del producto",
+            cantidad: "1 problema",
+            principal: true,
+            reclamos: 1,
+            cancelaciones: 0,
+            solucion: SOLUCION_PARTES,
+          },
+        ],
+      }),
+      // sin problemas
+      crudoDiagnostico({ id: "MLU3", sku: "C", exp: 75 }, {
+        score: 100,
+        nivel: "Buena",
+        resumen: "No tuviste problemas con este producto.",
+        problemas: [],
+      }),
+      // sin ventas
+      crudoDiagnostico({ id: "MLU4", sku: "D", exp: 75 }, {
+        score: -1,
+        nivel: "",
+        resumen: `Aún no la calculamos porque tu publicación no tuvo ventas en los últimos ${VENTANA_DIAS} días.`,
+        problemas: [],
+      }),
+    ]);
+    return evaluarExperiencia(pubs, opts).summary;
+  };
+
+  it("cuenta el semáforo, los reclamos y las situaciones", () => {
+    const s = armar();
+    expect(s.skus).toBe(4);
+    expect(s.rojo).toBe(1);
+    expect(s.amarillo).toBe(3);
+    expect(s.conReclamos).toBe(2);
+    expect(s.sinReclamos).toBe(2);
+    expect(s.reclamosTotales).toBe(18); // 17 + 1
+    expect(s.sinVentas).toBe(1);
+    expect(s.ventasConReclamos).toBe(522); // 422 + 100
+  });
+
+  it("agrupa los SKU por su problema principal, sumando los reclamos del SKU entero", () => {
+    const s = armar();
+    expect(s.ranking[0]).toEqual({
+      categoria: "Faltaban partes o accesorios del producto",
+      skus: 2,
+      reclamos: 18,
+      ventas180d: 522,
+      comoMejorar: SOLUCION_PARTES,
+    });
+  });
+
+  it("no rankea los SKU que no tienen problema principal", () => {
+    expect(armar().ranking).toHaveLength(1);
+  });
+
+  it("con la lista vacía devuelve ceros y no explota", () => {
+    const s = resumirExperiencia([], { publicacionesCapturadas: 0 });
+    expect(s.skus).toBe(0);
+    expect(s.reclamosTotales).toBe(0);
+    expect(s.ranking).toEqual([]);
+  });
+});
+
+// ------------------------------------------------------------ compararCapturas
+
+describe("compararCapturas", () => {
+  const conReclamos = (clave: string, reclamos: number, exp = 65): ExperienciaSku[] =>
+    agruparPorSku(
+      parseCaptura([
+        crudoDiagnostico({ id: `MLU-${clave}`, sku: clave, exp }, {
+          score: exp,
+          resumen: `En los últimos ${VENTANA_DIAS} días hiciste 50 ventas y tuviste ${reclamos} problemas.`,
+          problemas: [
+            {
+              codigo: "good_packing_but_missing_accessories",
+              categoria: "Faltaban partes o accesorios del producto",
+              cantidad: `${reclamos} problemas`,
+              principal: true,
+              reclamos,
+              cancelaciones: 0,
+              solucion: SOLUCION_PARTES,
+            },
+          ],
+        }),
+      ]),
+    );
+
+  it("avisa el SKU que sumó reclamos", () => {
+    const cambios = compararCapturas(conReclamos("A", 5), conReclamos("A", 2));
+    expect(cambios).toHaveLength(1);
+    expect(cambios[0].reclamosAntes).toBe(2);
+    expect(cambios[0].reclamos).toBe(5);
+    expect(cambios[0].deltaReclamos).toBe(3);
+    expect(cambios[0].nuevo).toBe(false);
+  });
+
+  it("no avisa el que quedó igual ni el que mejoró", () => {
+    expect(compararCapturas(conReclamos("A", 2), conReclamos("A", 2))).toEqual([]);
+    expect(compararCapturas(conReclamos("A", 1), conReclamos("A", 4))).toEqual([]);
+  });
+
+  it("avisa cuando cayó el puntaje aunque los reclamos no se muevan", () => {
+    const cambios = compararCapturas(conReclamos("A", 2, 30), conReclamos("A", 2, 65));
+    expect(cambios).toHaveLength(1);
+    expect(cambios[0].deltaExperiencia).toBe(-35);
+    expect(cambios[0].cayoEnRojo).toBe(true);
+  });
+
+  it("respeta el mínimo de reclamos nuevos", () => {
+    expect(compararCapturas(conReclamos("A", 3), conReclamos("A", 2), 2)).toEqual([]);
+    expect(compararCapturas(conReclamos("A", 4), conReclamos("A", 2), 2)).toHaveLength(1);
+  });
+
+  it("la primera comparación no avisa de todo el catálogo", () => {
+    // Sin captura anterior solo se avisan los que YA vienen con reclamos.
+    const sinReclamos = agruparPorSku(
+      parseCaptura([
+        crudoDiagnostico({ sku: "Z" }, { resumen: "No tuviste problemas con este producto.", problemas: [] }),
+      ]),
+    );
+    expect(compararCapturas(sinReclamos, null)).toEqual([]);
+    expect(compararCapturas(conReclamos("A", 3), null)[0].nuevo).toBe(true);
+  });
+
+  it("ordena lo que cayó a rojo primero y después lo que más sumó", () => {
+    const actual = [...conReclamos("A", 9), ...conReclamos("B", 3, 30)];
+    const anterior = [...conReclamos("A", 1), ...conReclamos("B", 2, 65)];
+    expect(compararCapturas(actual, anterior).map((c) => c.clave)).toEqual(["B", "A"]);
+  });
+});
+
+// -------------------------------------------------------------------- el mail
+
+describe("mail de cambios", () => {
+  const cambio = (over: Record<string, unknown> = {}) => ({
+    clave: "16214-BLA",
+    sku: "16214-BLA",
+    titulo: "Ropero 3 Puertas Corredizas Bariloche",
+    url: "https://www.mercadolibre.com.uy/p/MLU123",
+    reclamosAntes: 12,
+    reclamos: 17,
+    deltaReclamos: 5,
+    experienciaAntes: 65,
+    experiencia: 30,
+    deltaExperiencia: -35,
+    nivelAntes: "Media",
+    nivel: "Mala",
+    problemaPrincipal: "Faltaban partes o accesorios del producto",
+    comoMejorar: SOLUCION_PARTES,
+    nuevo: false,
+    cayoEnRojo: true,
+    ...over,
+  });
+
+  it("el asunto avisa cuántos cayeron a rojo", () => {
+    expect(asuntoCambios([cambio()])).toContain("1 SKU con mala experiencia");
+  });
+
+  it("el asunto de un solo cambio nombra el producto", () => {
+    const a = asuntoCambios([cambio({ cayoEnRojo: false })]);
+    expect(a).toContain("Ropero 3 Puertas");
+    expect(a).toContain("+5 reclamos");
+  });
+
+  it("el cuerpo trae el problema y el consejo de ML en texto y HTML", () => {
+    const { text, html } = cuerpoCambios([cambio()], { panelUrl: "https://panel/reportes/experiencia" });
+    expect(text).toContain("16214-BLA");
+    expect(text).toContain("Reclamos: 12 → 17 (+5)");
+    expect(text).toContain(SOLUCION_PARTES);
+    expect(text).toContain("https://panel/reportes/experiencia");
+    expect(html).toContain("+5");
+    expect(html).toContain("pasó a rojo");
+    expect(html).toContain("Ver el reporte");
+  });
+
+  it("escapa el HTML de los títulos", () => {
+    const { html } = cuerpoCambios([cambio({ titulo: '<script>alert("x")</script>' })]);
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("corta la lista larga y dice cuántos faltan", () => {
+    const muchos = Array.from({ length: 30 }, (_, i) => cambio({ clave: `SKU${i}` }));
+    const { text, html } = cuerpoCambios(muchos, { max: 5 });
+    expect(text).toContain("… y 25 más.");
+    expect(html).toContain("… y 25 más.");
+  });
+});
+
+// --------------------------------------------------------------------- varios
 
 describe("normalizeExperienciaParams", () => {
-  it("sin config guardada usa los defaults", () => {
-    // minCaida 14 está calibrado por encima de la inconsistencia de ±13 pts que
-    // devuelve la API según cómo se lea la publicación (ver DEFAULT_EXPERIENCIA_PARAMS).
-    expect(normalizeExperienciaParams(null)).toEqual({ umbral: 100, minCaida: 14 });
-  });
-
-  it("acota los valores fuera de rango y redondea", () => {
-    expect(normalizeExperienciaParams({ umbral: 500, minCaida: 0 })).toEqual({ umbral: 100, minCaida: 1 });
-    expect(normalizeExperienciaParams({ umbral: -3, minCaida: 7.6 })).toEqual({ umbral: 1, minCaida: 8 });
-  });
-
-  it("la basura cae al default en vez de romper", () => {
-    expect(normalizeExperienciaParams({ umbral: "hola" as unknown as number })).toEqual({
+  it("usa los defaults cuando no hay nada guardado", () => {
+    expect(normalizeExperienciaParams(null)).toEqual({
       umbral: 100,
-      minCaida: 14,
+      rojoHasta: 30,
+      minReclamos: 1,
     });
+  });
+
+  it("acota los valores fuera de rango y la basura", () => {
+    expect(normalizeExperienciaParams({ umbral: 999 }).umbral).toBe(100);
+    expect(normalizeExperienciaParams({ umbral: 0 }).umbral).toBe(1);
+    expect(normalizeExperienciaParams({ minReclamos: 0 }).minReclamos).toBe(1);
+    expect(normalizeExperienciaParams({ rojoHasta: -5 }).rojoHasta).toBe(0);
+    expect(
+      normalizeExperienciaParams({ umbral: "x" as unknown as number }).umbral,
+    ).toBe(100);
   });
 });
 
-// -------------------------------------------------------------------- caídas
+describe("experienciaEstado", () => {
+  const base = agruparPorSku(parseCaptura([crudoDiagnostico()]))[0];
 
-describe("detectarCaidas", () => {
-  const grupo = (over: Partial<PubExperiencia>) => agruparPorSku([pub(over)]);
-
-  it("la primera vez que se ve una publicación no hay caída", () => {
-    const items = grupo({ id: "MLU1", score: 40 });
-    expect(detectarCaidas(items, [], 5)).toHaveLength(0);
+  it("distingue mala, con problemas y sin problemas", () => {
+    expect(experienciaEstado(base).label).toBe("Mala");
+    expect(experienciaEstado({ ...base, semaforo: "amarillo" }).label).toBe("Con problemas");
+    expect(
+      experienciaEstado({ ...base, semaforo: "amarillo", reclamos: 0 }).label,
+    ).toBe("Sin problemas");
   });
 
-  it("avisa cuando el puntaje bajó más que el umbral", () => {
-    const items = grupo({ id: "MLU1", sku: "48000-NEG", score: 50 });
-    const caidas = detectarCaidas(items, [{ itemId: "MLU1", score: 65 }], 5);
-    expect(caidas).toHaveLength(1);
-    expect(caidas[0]).toMatchObject({
-      itemId: "MLU1",
-      codigo: "48000",
-      scoreAnterior: 65,
-      score: 50,
-      delta: 15,
-      nivelAnterior: "BUENA",
-      cruzo100: false,
-    });
+  it("no muestra como buena una publicación que no tiene datos", () => {
+    expect(experienciaEstado({ ...base, situacion: "sin-ventas" }).label).toBe("Sin ventas");
+    expect(experienciaEstado({ ...base, situacion: "sin-datos" }).label).toBe("Sin datos");
+  });
+});
+
+describe("experienciaToText", () => {
+  it("resume el reporte para el log", () => {
+    const rep = evaluarExperiencia(parseCaptura([crudoDiagnostico()]), opts);
+    const txt = experienciaToText(rep);
+    expect(txt).toContain("1 SKU");
+    expect(txt).toContain("17 problemas");
+    expect(txt).toContain("Faltaban partes");
   });
 
-  it("una caída chica no molesta", () => {
-    const items = grupo({ id: "MLU1", score: 63 });
-    expect(detectarCaidas(items, [{ itemId: "MLU1", score: 65 }], 5)).toHaveLength(0);
-  });
-
-  it("dejar de estar en 100% se avisa aunque sea de un punto", () => {
-    const items = grupo({ id: "MLU1", score: 99 });
-    const caidas = detectarCaidas(items, [{ itemId: "MLU1", score: 100 }], 5);
-    expect(caidas).toHaveLength(1);
-    expect(caidas[0].cruzo100).toBe(true);
-    expect(caidas[0].delta).toBe(1);
-  });
-
-  it("mejorar o quedar igual no es una caída", () => {
-    const items = grupo({ id: "MLU1", score: 70 });
-    expect(detectarCaidas(items, [{ itemId: "MLU1", score: 70 }], 5)).toHaveLength(0);
-    expect(detectarCaidas(items, [{ itemId: "MLU1", score: 50 }], 5)).toHaveLength(0);
-  });
-
-  it("el cruce del 100% va antes que una caída más grande", () => {
-    const items = agruparPorSku([
-      pub({ id: "MLU1", sku: "111-A", score: 99 }),
-      pub({ id: "MLU2", sku: "222-A", score: 20 }),
-    ]);
-    const caidas = detectarCaidas(
-      items,
-      [
-        { itemId: "MLU1", score: 100 },
-        { itemId: "MLU2", score: 60 },
-      ],
-      5,
+  it("avisa cuántos quedaron sin mostrar", () => {
+    const pubs: CapturaPub[] = parseCaptura(
+      Array.from({ length: 20 }, (_, i) => crudoDiagnostico({ id: `MLU${i}`, sku: `SKU${i}` })),
     );
-    expect(caidas.map((c) => c.itemId)).toEqual(["MLU1", "MLU2"]);
-  });
-
-  it("arrastra el problema principal del momento de la caída", () => {
-    const items = agruparPorSku([
-      pub({ id: "MLU1", score: 50, problemas: problemasDe([check("Fotos", "bad", "1 fotos — minimo 6")]) }),
-    ]);
-    const [c] = detectarCaidas(items, [{ itemId: "MLU1", score: 70 }], 5);
-    expect(c.problemaPrincipal).toBe("Fotos");
+    expect(experienciaToText(evaluarExperiencia(pubs, opts), 5)).toContain("y 15 más");
   });
 });
 
-// ------------------------------------------------------- confirmar caídas
-
-describe("confirmarPendientes", () => {
-  /** Índice de lo que leyó la corrida de hoy. */
-  const hoy = (score: number, over: Partial<PubExperiencia> = {}) =>
-    new Map([
-      [
-        "MLU1",
-        pub({
-          id: "MLU1",
-          sku: "48000-NEG",
-          score,
-          nivel: score >= 60 ? "BUENA" : score >= 40 ? "REGULAR" : "MALA",
-          problemas: problemasDe([check("Fotos", "bad", "1 fotos")]),
-          ...over,
-        }),
-      ],
-    ]);
-  const pendiente = { itemId: "MLU1", bajoDe: 70, score: 50 };
-
-  it("si hoy sigue caída, se confirma y sale el mail", () => {
-    const out = confirmarPendientes([pendiente], hoy(50), 5);
-    expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({
-      itemId: "MLU1",
-      codigo: "48000",
-      scoreAnterior: 70,
-      score: 50,
-      delta: 20,
-      nivelAnterior: "BUENA",
-    });
+describe("etiquetas", () => {
+  it("el semáforo del Excel es el mismo que el de la pantalla", () => {
+    expect(SEMAFORO_TEXTO.rojo).toContain("Rojo");
+    expect(Object.keys(SEMAFORO_TEXTO).sort()).toEqual(["amarillo", "rojo", "verde"]);
   });
 
-  it("si hoy volvió al puntaje original, era un artefacto de lectura y no se avisa", () => {
-    expect(confirmarPendientes([pendiente], hoy(70), 5)).toHaveLength(0);
-  });
-
-  it("si hoy está aún peor, el delta se actualiza al de hoy", () => {
-    const [c] = confirmarPendientes([pendiente], hoy(35), 5);
-    expect(c.score).toBe(35);
-    expect(c.delta).toBe(35);
-    expect(c.nivel).toBe("MALA");
-  });
-
-  it("si hoy recuperó casi todo y quedó por debajo del mínimo, no se avisa", () => {
-    // 70 → 67 son 3 puntos: por debajo de minCaida 5.
-    expect(confirmarPendientes([pendiente], hoy(67), 5)).toHaveLength(0);
-  });
-
-  it("una publicación que ya no está activa no se avisa", () => {
-    expect(confirmarPendientes([pendiente], new Map(), 5)).toHaveLength(0);
-  });
-
-  it("el cruce del 100% se confirma aunque sea de un punto", () => {
-    const out = confirmarPendientes([{ itemId: "MLU1", bajoDe: 100, score: 99 }], hoy(99), 5);
-    expect(out).toHaveLength(1);
-    expect(out[0].cruzo100).toBe(true);
-    expect(out[0].delta).toBe(1);
-  });
-
-  it("una publicación sin SKU se agrupa por su MLU", () => {
-    const [c] = confirmarPendientes([pendiente], hoy(50, { sku: null }), 5);
-    expect(c.codigo).toBe("MLU1");
-    expect(c.sku).toBeNull();
-  });
-
-  it("ordena: primero el cruce del 100%, después la peor caída", () => {
-    const actual = new Map([
-      ["MLU1", pub({ id: "MLU1", sku: "111-A", score: 99 })],
-      ["MLU2", pub({ id: "MLU2", sku: "222-A", score: 20 })],
-    ]);
-    const out = confirmarPendientes(
-      [
-        { itemId: "MLU1", bajoDe: 100, score: 99 },
-        { itemId: "MLU2", bajoDe: 60, score: 20 },
-      ],
-      actual,
-      5,
-    );
-    expect(out.map((c) => c.itemId)).toEqual(["MLU1", "MLU2"]);
-  });
-});
-
-// ---------------------------------------------------------------------- mail
-
-describe("asuntoCaidas", () => {
-  const caida = (over: Record<string, unknown> = {}) =>
-    ({
-      itemId: "MLU1",
-      codigo: "48000",
-      sku: "48000-NEG",
-      titulo: "Silla de madera",
-      permalink: null,
-      scoreAnterior: 70,
-      score: 50,
-      delta: 20,
-      nivelAnterior: "BUENA",
-      nivel: "REGULAR",
-      cruzo100: false,
-      problemaPrincipal: "Fotos",
-      ...over,
-    }) as Parameters<typeof asuntoCaidas>[0][number];
-
-  it("una sola caída nombra la publicación y el salto", () => {
-    expect(asuntoCaidas([caida()])).toContain("Silla de madera");
-    expect(asuntoCaidas([caida()])).toContain("70% → 50%");
-  });
-
-  it("varias caídas se resumen en la cantidad", () => {
-    expect(asuntoCaidas([caida(), caida({ itemId: "MLU2" })])).toContain("2 publicaciones");
-  });
-
-  it("cuando todas cruzaron el 100% lo dice explícito", () => {
-    const s = asuntoCaidas([caida({ cruzo100: true, scoreAnterior: 100, score: 95, delta: 5 })]);
-    expect(s).toContain("dejó de estar en 100%");
-  });
-});
-
-describe("cuerpoCaidas", () => {
-  const caidas = Array.from({ length: 30 }, (_, i) => ({
-    itemId: `MLU${i}`,
-    codigo: `${1000 + i}`,
-    sku: `${1000 + i}-NEG`,
-    titulo: `Producto ${i}`,
-    permalink: `https://articulo.mercadolibre.com.uy/MLU-${i}`,
-    scoreAnterior: 80,
-    score: 60,
-    delta: 20,
-    nivelAnterior: "EXCELENTE",
-    nivel: "BUENA",
-    cruzo100: false,
-    problemaPrincipal: "Fotos",
-  }));
-
-  it("arma texto y HTML con el detalle de cada caída", () => {
-    const { text, html } = cuerpoCaidas(caidas.slice(0, 2));
-    expect(text).toContain("Producto 0");
-    expect(text).toContain("80% → 60%");
-    expect(text).toContain("Problema principal: Fotos");
-    expect(html).toContain("Producto 0");
-    expect(html).toContain("−20 pts");
-  });
-
-  it("corta la lista larga y dice cuántas quedaron afuera", () => {
-    const { text, html } = cuerpoCaidas(caidas, { max: 25 });
-    expect(text).toContain("… y 5 más.");
-    expect(html).toContain("… y 5 más.");
-  });
-
-  it("incluye el link al panel cuando se sabe la URL", () => {
-    const { text, html } = cuerpoCaidas(caidas.slice(0, 1), { panelUrl: "https://panel.test/reportes/experiencia" });
-    expect(text).toContain("https://panel.test/reportes/experiencia");
-    expect(html).toContain('href="https://panel.test/reportes/experiencia"');
-  });
-
-  it("escapa el HTML de los títulos para no romper el mail", () => {
-    const { html } = cuerpoCaidas([
-      { ...caidas[0], titulo: 'Silla <b>"grande"</b> & co', permalink: null },
-    ]);
-    expect(html).toContain("Silla &lt;b&gt;&quot;grande&quot;&lt;/b&gt; &amp; co");
-    expect(html).not.toContain("<b>\"grande\"</b>");
+  it("cada situación tiene un texto para la columna", () => {
+    expect(TEXTO_SITUACION["sin-ventas"]).toBe(`Sin ventas en ${VENTANA_DIAS} días`);
+    expect(Object.keys(TEXTO_SITUACION)).toHaveLength(4);
   });
 });

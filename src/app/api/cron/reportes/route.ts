@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { runAndDeliverVentasAceleradas } from "@/lib/reportes.server";
-import { runAndDeliverExperiencia } from "@/lib/experiencia.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-// El chequeo de experiencia barre las ~800 publicaciones activas contra ML, así
-// que necesita bastante más que los 60s que alcanzaban para ventas aceleradas.
-export const maxDuration = 300;
+export const maxDuration = 120;
 
 // GET /api/cron/reportes
 // Disparo automático diario (Vercel Cron, 12:00 UTC = 09:00 Uruguay).
-// Corre los reportes, los persiste y los envía: ventas aceleradas por WhatsApp y
-// las caídas de experiencia de compra por mail.
+// Corre el reporte de ventas aceleradas, lo persiste y lo manda por WhatsApp.
+//
+// El reporte de experiencia de compra NO va acá: su dato sale del panel de
+// vendedor de MercadoLibre (login de por medio) y no de la API, así que no hay
+// nada que un cron pueda ir a buscar. Ese reporte avisa por mail cuando se
+// importa una captura nueva y se compara con la anterior — ver
+// `lib/experiencia.server.ts`.
 //
 // Protección: Vercel Cron manda "Authorization: Bearer $CRON_SECRET". Si no hay
 // CRON_SECRET definido, se rechaza (evita que quede abierto por accidente).
@@ -22,39 +24,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
-  // Los dos reportes son independientes: si uno falla, el otro tiene que salir
-  // igual. Por eso van con allSettled y cada uno informa su propio error.
-  const [aceleradas, experiencia] = await Promise.allSettled([
-    runAndDeliverVentasAceleradas("cron"),
-    runAndDeliverExperiencia("cron"),
-  ]);
-
-  const body = {
-    ok: aceleradas.status === "fulfilled" || experiencia.status === "fulfilled",
-    ventasAceleradas:
-      aceleradas.status === "fulfilled"
-        ? {
-            enRiesgo: aceleradas.value.report.summary.total,
-            whatsapp: aceleradas.value.whatsapp.status,
-            runId: aceleradas.value.run.id,
-          }
-        : { error: (aceleradas.reason as Error)?.message || "falló" },
-    experiencia:
-      experiencia.status === "fulfilled"
-        ? {
-            aMejorar: experiencia.value.report.summary.aMejorar,
-            caidas: experiencia.value.caidas.length,
-            nuevasAConfirmar: experiencia.value.nuevas,
-            recuperadas: experiencia.value.recuperadas,
-            cruzaron100: experiencia.value.caidas.filter((c) => c.cruzo100).length,
-            primeraCorrida: experiencia.value.primeraCorrida,
-            email: experiencia.value.email.status,
-            runId: experiencia.value.runId,
-          }
-        : { error: (experiencia.reason as Error)?.message || "falló" },
-  };
-
-  // 500 solo si fallaron los dos: así el cron de Vercel marca el intento como
-  // fallido cuando no salió nada, pero no cuando uno de los dos sí salió.
-  return NextResponse.json(body, { status: body.ok ? 200 : 500 });
+  try {
+    const aceleradas = await runAndDeliverVentasAceleradas("cron");
+    return NextResponse.json({
+      ok: true,
+      ventasAceleradas: {
+        enRiesgo: aceleradas.report.summary.total,
+        whatsapp: aceleradas.whatsapp.status,
+        runId: aceleradas.run.id,
+      },
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { ok: false, ventasAceleradas: { error: (e as Error).message || "falló" } },
+      { status: 500 },
+    );
+  }
 }

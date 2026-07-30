@@ -1,447 +1,509 @@
 // Reporte "Publicaciones con mala experiencia de compra".
 //
-// MercadoLibre le pone a cada publicación un puntaje de EXPERIENCIA DE COMPRA de
-// 0 a 100 que sale de nueve aspectos con distinto peso (ver ASPECTOS). No es lo
-// mismo que el *health* del reporte "Calidad de las publicaciones": el health es
-// uno de los nueve aspectos y pesa 25 de los 100 puntos. Este reporte lista todo
-// lo que no llega a 100 y dice qué hay que arreglar primero.
+// La EXPERIENCIA DE COMPRA es el puntaje que MercadoLibre le pone a cada
+// publicación mirando los PROBLEMAS que tuvieron los compradores en las ventas
+// de los últimos 180 días ("hiciste 422 ventas y tuviste 17 problemas"), y lo
+// compara contra productos parecidos de la competencia. Cada problema viene
+// tipificado (faltaban partes, llegó dañado, era diferente a lo pedido…) y con
+// el consejo textual de ML para arreglarlo.
 //
-// Las filas son SKU UNIFICADOS: un mismo producto suele tener varias
-// publicaciones (colores, talles, duplicados viejos) y arreglarlas de a una es
-// perder el tiempo. Se agrupan por código base ("48000-NEG-40" → "48000"), que
-// es el mismo criterio de Reposición y de las fotos por código. Las
-// publicaciones sin SKU quedan como grupo propio (no hay con qué unificarlas).
+// NO confundir con la CALIDAD de la publicación (el health de ML, que mira si la
+// ficha está completa, si tiene fotos, video, catálogo…). Esa es otra métrica y
+// tiene su propio reporte en `/reportes/calidad`. La versión anterior de este
+// módulo mezclaba las dos: usaba `/ml-experiencia/:id` de MUNDO SHOP, que es un
+// puntaje casero de 9 aspectos de la ficha y no tiene nada que ver con los
+// reclamos de los compradores.
 //
-// Módulo PURO (sin red/DB) → testeable. El fetch live vive en
+// DE DÓNDE SALE EL DATO. Del PANEL DE VENDEDOR, no de la API: la documentación
+// de MUNDO SHOP lo dice en sus notas ("Reclamos: No disponible por API de ML,
+// permiso no habilitado"). Por eso el módulo no puede refrescarse solo: la
+// captura del panel se hace con el navegador y se importa (ver la sección
+// "Experiencia de compra" del README), queda guardada como snapshot, y el
+// reporte se arma leyendo el último snapshot.
+//
+// Las filas son SKU COMPLETOS ("16214-BLA" y "16214-NOG" van separados) porque
+// ML calcula la experiencia a nivel producto: las publicaciones que comparten
+// SKU traen exactamente los mismos reclamos y el mismo consejo. Por eso los
+// números se toman UNA vez por SKU y no se suman entre publicaciones hermanas.
+//
+// Módulo PURO (sin red/DB) → testeable. Lo que toca la base vive en
 // `experiencia.server.ts`.
-
-import { parseSellerSku, type MlCheck, type MlExperiencia, type MlItem } from "@/lib/mundoshop";
 
 export const EXPERIENCIA_KEY = "experiencia";
 
-/** Puntaje perfecto. Todo lo que esté por debajo entra al reporte. */
+/** La ventana que usa MercadoLibre para calcular la experiencia. */
+export const VENTANA_DIAS = 180;
+
+/** Puntaje perfecto: por debajo de esto la publicación entra al reporte. */
 export const EXPERIENCIA_MAX = 100;
 
-// ------------------------------------------------------------------- aspectos
+// ------------------------------------------------------------------ situación
 
 /**
- * Los nueve aspectos que componen el puntaje, con el peso que les da ML y la
- * recomendación concreta de MercadoLibre para cada uno.
- *
- * `apiItem` es el nombre EXACTO que manda la API en `checks[].item` (sin
- * tildes). Si algún día ML agrega o renombra un aspecto, `aspectoDe` lo deja
- * pasar como aspecto desconocido en vez de perderlo.
+ * En qué situación está una publicación según lo que informa el panel. No es lo
+ * mismo "no tuvo problemas" que "no tuvo ventas": en el segundo caso ML todavía
+ * no calculó nada, así que no hay puntaje que mejorar.
  */
-export type AspectoDef = {
-  code: string;
-  apiItem: string;
-  label: string;
-  peso: number; // puntos que aporta sobre 100
-  comoMejorar: string; // qué pide MercadoLibre
+export type Situacion = "con-problemas" | "sin-problemas" | "sin-ventas" | "sin-datos";
+
+export const TEXTO_SITUACION: Record<Situacion, string> = {
+  "con-problemas": "Con problemas",
+  "sin-problemas": "Sin problemas registrados",
+  "sin-ventas": `Sin ventas en ${VENTANA_DIAS} días`,
+  "sin-datos": "No se pudo leer del panel",
 };
-
-export const ASPECTOS: AspectoDef[] = [
-  {
-    code: "health",
-    apiItem: "Health ML",
-    label: "Calidad de la ficha (health)",
-    peso: 25,
-    comoMejorar:
-      "Completá la ficha técnica: todos los atributos obligatorios y los recomendados (marca, modelo, medidas, material, color). Es lo que más mueve el puntaje y ML lo usa para mostrarte en las búsquedas.",
-  },
-  {
-    code: "fotos",
-    apiItem: "Fotos",
-    label: "Fotos",
-    peso: 15,
-    comoMejorar:
-      "Subí al menos 6 fotos de 1200×1200 px o más, fondo blanco en la principal, sin textos ni logos ni marcas de agua. Con esa resolución se habilita el zoom, que es lo que ML premia.",
-  },
-  {
-    code: "reviews",
-    apiItem: "Reviews",
-    label: "Opiniones",
-    peso: 15,
-    comoMejorar:
-      "Las opiniones no se pueden pedir ni comprar: se ganan despachando rápido, describiendo bien el producto y respondiendo las preguntas. Publicar el producto en catálogo hace que hereden las opiniones de la ficha.",
-  },
-  {
-    code: "envio_gratis",
-    apiItem: "Envio gratis",
-    label: "Envío gratis",
-    peso: 10,
-    comoMejorar:
-      "Activá envío gratis. ML lo usa como filtro de búsqueda y le da más visibilidad; en productos de más de $ 500 lo bonifica en parte.",
-  },
-  {
-    code: "catalogo",
-    apiItem: "Catalogo ML",
-    label: "Catálogo",
-    peso: 10,
-    comoMejorar:
-      "Sumá la publicación al catálogo de ML para competir por la Buy Box: hereda las opiniones de la ficha y aparece primero cuando ganás el mejor precio.",
-  },
-  {
-    code: "descripcion",
-    apiItem: "Descripcion",
-    label: "Descripción",
-    peso: 10,
-    comoMejorar:
-      "Escribí al menos 500 caracteres: qué es, medidas, materiales, qué incluye la caja, cómo se usa y garantía. Sin datos de contacto ni links, que ML los penaliza.",
-  },
-  {
-    code: "carrito",
-    apiItem: "Carrito",
-    label: "Carrito",
-    peso: 5,
-    comoMejorar:
-      "Habilitá la compra con carrito para que te compren varios productos juntos. Pide stock disponible y envío por Mercado Envíos.",
-  },
-  {
-    code: "video",
-    apiItem: "Video",
-    label: "Video",
-    peso: 5,
-    comoMejorar:
-      "Agregá un video corto (hasta 60 s) mostrando el producto en uso. ML lo muestra junto a las fotos y mejora la conversión.",
-  },
-  {
-    code: "infracciones",
-    apiItem: "Infracciones",
-    label: "Infracciones",
-    peso: 5,
-    comoMejorar:
-      "Resolvé las infracciones pendientes desde «Mis publicaciones → Infracciones». Además de restar puntos, ML te baja la visibilidad hasta que las cierres.",
-  },
-];
-
-const PESO_TOTAL = ASPECTOS.reduce((s, a) => s + a.peso, 0); // 100
-
-const porApiItem = new Map(ASPECTOS.map((a) => [a.apiItem.toLowerCase(), a]));
-
-/** Definición del aspecto según el nombre que manda la API (o uno genérico). */
-export function aspectoDe(apiItem: string): AspectoDef {
-  const found = porApiItem.get(apiItem.trim().toLowerCase());
-  if (found) return found;
-  // Aspecto nuevo que ML/MUNDO SHOP agregó y todavía no está catalogado: se
-  // muestra igual, sin peso conocido, para no esconderlo.
-  return {
-    code: `otro:${apiItem.trim().toLowerCase().replace(/\s+/g, "_")}`,
-    apiItem,
-    label: apiItem,
-    peso: 0,
-    comoMejorar: "Revisá este aspecto en la publicación: MercadoLibre lo está evaluando.",
-  };
-}
 
 // -------------------------------------------------------------------- semáforo
 
-export type Semaforo = "verde" | "amarillo" | "naranja" | "rojo";
+export type Semaforo = "rojo" | "amarillo" | "verde";
 
-/**
- * Color del semáforo según los niveles que usa ML (EXCELENTE / BUENA / REGULAR /
- * MALA). El 100 exacto también es verde, pero se distingue con `esPerfecta`.
- */
-export function semaforoDe(score: number): Semaforo {
-  if (score >= 80) return "verde";
-  if (score >= 60) return "amarillo";
-  if (score >= 40) return "naranja";
-  return "rojo";
-}
-
-/** Etiqueta del nivel tal como la nombra MercadoLibre. */
-export function nivelDe(score: number): string {
-  if (score >= 80) return "EXCELENTE";
-  if (score >= 60) return "BUENA";
-  if (score >= 40) return "REGULAR";
-  return "MALA";
-}
-
-// ------------------------------------------------------------------ problemas
-
-/**
- * Un aspecto que no está en verde, con lo que hay que hacer.
- *
- * `puntosEnJuego` es una ESTIMACIÓN de cuántos puntos recuperás si lo arreglás:
- * un aspecto en `bad` no suma nada (está en juego todo su peso) y uno en `warn`
- * suma a medias (la mitad). Sirve para ordenar por dónde conviene empezar; el
- * puntaje real lo calcula ML y el faltante exacto es `100 − score`.
- */
-export type Problema = {
-  code: string;
-  label: string;
-  status: "warn" | "bad";
-  detalle: string; // lo que informa ML, ej. "3 fotos", "187 chars — ampliar"
-  peso: number;
-  puntosEnJuego: number;
-  comoMejorar: string;
+export const SEMAFORO_TEXTO: Record<Semaforo, string> = {
+  rojo: "🔴 Rojo",
+  amarillo: "🟡 Amarillo",
+  verde: "🟢 Verde",
 };
 
-const EN_JUEGO: Record<"warn" | "bad", number> = { bad: 1, warn: 0.5 };
-
-/** Los aspectos que no están en verde de una publicación, peor primero. */
-export function problemasDe(checks: MlCheck[]): Problema[] {
-  const out: Problema[] = [];
-  for (const c of checks) {
-    if (c.status === "ok") continue;
-    const def = aspectoDe(c.item);
-    out.push({
-      code: def.code,
-      label: def.label,
-      status: c.status,
-      detalle: c.detail,
-      peso: def.peso,
-      puntosEnJuego: def.peso * EN_JUEGO[c.status],
-      comoMejorar: def.comoMejorar,
-    });
-  }
-  return out.sort(compararProblemas);
-}
-
 /**
- * Orden de los problemas: las infracciones primero (ML baja la visibilidad
- * mientras estén abiertas, así que importan más que los puntos que restan) y
- * después por puntos en juego.
+ * Color de la fila. El corte en 30 no es arbitrario: es el piso que muestra el
+ * panel cuando la experiencia ya es "Mala" y ML avisa que puede pausar o anular
+ * la publicación. El nivel textual de ML (Mala / Media / Buena) va aparte, en su
+ * propia columna, porque puede no acompañar al porcentaje del listado.
  */
-function compararProblemas(a: Problema, b: Problema): number {
-  const infA = a.code === "infracciones" ? 0 : 1;
-  const infB = b.code === "infracciones" ? 0 : 1;
-  if (infA !== infB) return infA - infB;
-  if (a.puntosEnJuego !== b.puntosEnJuego) return b.puntosEnJuego - a.puntosEnJuego;
-  return b.peso - a.peso;
+export function semaforoDe(experiencia: number | null, rojoHasta = 30): Semaforo {
+  if (experiencia === null) return "amarillo"; // sin dato: hay que mirarla igual
+  if (experiencia <= rojoHasta) return "rojo";
+  if (experiencia >= EXPERIENCIA_MAX) return "verde";
+  return "amarillo";
 }
 
-// -------------------------------------------------------------- publicaciones
+// ------------------------------------------------------- parseo de la captura
 
-/**
- * Código base / padre de un SKU: "48000-NEG-40" → "48000".
- *
- * El trim va ANTES de partir: con un espacio adelante, el split deja un primer
- * elemento vacío y el código se perdía entero.
- */
-export function codigoBase(sku: string): string {
-  return sku.trim().split(/[-\s/]/)[0].trim().toUpperCase();
-}
+/** Un tipo de problema informado por ML, con su consejo. */
+export type ProblemaTipo = {
+  /** Código interno de ML, ej. "good_packing_but_missing_accessories". */
+  codigo: string | null;
+  /** La categoría que se muestra arriba, ej. "Faltaban partes o accesorios del producto". */
+  categoria: string;
+  /** El detalle largo, ej. "El embalaje llegó bien pero faltaban partes…". */
+  detalle: string | null;
+  /** Cuántos problemas de este tipo hubo. */
+  cantidad: number;
+  reclamos: number;
+  cancelaciones: number;
+  /** ML marca uno como PROBLEMA PRINCIPAL. */
+  principal: boolean;
+  /** El "Cómo mejorar" textual de MercadoLibre. */
+  comoMejorar: string | null;
+  /** Lo que ML propone hacer: "Modificar publicación" | "Pausar desde el listado". */
+  accion: string | null;
+};
 
-export type PubExperiencia = {
+/** El detalle de la pantalla de experiencia de compra de una publicación. */
+export type DetallePub = {
+  /** El puntaje de la pantalla (0..100). ML manda -1 cuando no lo calculó. */
+  score: number | null;
+  /** Mala | Media | Buena, tal como lo nombra ML. */
+  nivel: string | null;
+  resumen: string | null;
+  /** La advertencia de ML ("podríamos pausarla", "afecta tu exposición"…). */
+  aviso: string | null;
+  ventas180d: number | null;
+  problemas180d: number | null;
+  situacion: Situacion;
+  /** Distribución por etapa, ej. "Con el producto entregado: 100%". */
+  dist: string[];
+  problemas: ProblemaTipo[];
+};
+
+/** Una publicación tal como queda después de normalizar la captura del panel. */
+export type CapturaPub = {
   id: string; // MLU...
   titulo: string;
   sku: string | null;
-  permalink: string | null;
-  thumbnail: string | null;
-  score: number; // 0..100
-  nivel: string;
-  semaforo: Semaforo;
-  precio: number | null;
-  disponibles: number | null;
-  vendidasHistorico: number | null; // sold_quantity de ML (histórico de la publicación)
-  visitas30d: number | null;
-  reviews: { total: number; promedio: number | null };
-  problemas: Problema[];
+  estadoMl: string | null; // active | paused | closed
+  catalogo: boolean;
+  stock: string | null; // texto tal cual lo muestra el panel
+  precio: string | null; // ídem
+  /** % de calidad de la publicación que muestra el listado (otra métrica). */
+  calidad: number | null;
+  /**
+   * % de EXPERIENCIA que muestra el listado: es el que ordena el reporte.
+   *
+   * null cuando no hay puntaje. Son dos casos distintos, y `sinCalcular` los
+   * separa: ML manda -1 en las publicaciones que no vendieron nada en la ventana
+   * (683 de 2213 en la captura del 29/07) y no manda nada cuando la fila del
+   * listado no se pudo leer (32 de 2213).
+   */
+  experiencia: number | null;
+  /** true cuando ML no calculó el puntaje porque la publicación no tuvo ventas. */
+  sinCalcular: boolean;
+  url: string | null;
+  detalle: DetallePub | null;
 };
 
+const asStr = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t === "" ? null : t;
+};
+
+/** Número tolerante: acepta "1.234", " 12 ", 12. Descarta lo que no es número. */
+const asNum = (v: unknown): number | null => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+  const t = v.replace(/[.\s]/g, "").replace(",", ".");
+  if (t === "") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+};
+
+/** "un problema" / "una venta" también son cantidades. */
+const PALABRA_NUM: Record<string, number> = { un: 1, una: 1, uno: 1 };
+
+/** Cantidad de un texto tipo "8 problemas" o "un problema". */
+export function parseCantidad(texto: string | null | undefined): number {
+  if (!texto) return 0;
+  const m = /(\d[\d.]*|un[ao]?)\b/i.exec(texto);
+  if (!m) return 0;
+  const bruto = m[1].toLowerCase();
+  return PALABRA_NUM[bruto] ?? asNum(bruto) ?? 0;
+}
+
 /**
- * Arma la publicación evaluada a partir del item de la lista y su experiencia.
+ * Saca ventas, problemas y situación del texto que muestra el panel. Las cuatro
+ * formas que devuelve MercadoLibre (medidas sobre la captura de 249
+ * publicaciones) son:
  *
- * El SKU sale de `seller_sku` cuando está y, si no, de `skuPorItem`: el puente
- * item_id→SKU que se armó con las ventas históricas. Hace falta porque ML
- * devuelve `seller_sku` vacío en la enorme mayoría de las publicaciones (45 de
- * 817 al escribir esto), y sin SKU no hay nada que unificar.
+ *  - "En los últimos 180 días hiciste 422 ventas y tuviste 17 problemas. …"
+ *  - "No tuviste problemas con este producto."      → vendió, sin problemas
+ *  - "Aún no la calculamos porque tu publicación no tuvo ventas en los últimos
+ *    180 días."                                     → no hay nada que mejorar
+ *  - ""                                             → no se pudo leer
+ *
+ * El texto de "sin problemas" NO trae la cantidad de ventas: ahí el reporte cae
+ * en las ventas de nuestra propia base para no mostrar el SKU como si no
+ * vendiera nada.
  */
-export function toPublicacion(
-  item: MlItem,
-  exp: MlExperiencia,
-  skuPorItem?: Map<string, string>,
-): PubExperiencia {
-  const score = exp.experience_score;
+export function parseResumen(resumen: string | null | undefined): {
+  ventas180d: number | null;
+  problemas180d: number | null;
+  situacion: Situacion;
+} {
+  const t = (resumen ?? "").trim();
+  if (t === "") return { ventas180d: null, problemas180d: null, situacion: "sin-datos" };
+
+  if (/no tuv[oi]\w*\s+ventas/i.test(t)) {
+    return { ventas180d: 0, problemas180d: 0, situacion: "sin-ventas" };
+  }
+
+  const mVentas = /hiciste\s+(\d[\d.]*|una?)\s+ventas?/i.exec(t);
+  const ventas = mVentas
+    ? (PALABRA_NUM[mVentas[1].toLowerCase()] ?? asNum(mVentas[1]))
+    : null;
+
+  if (/no tuviste\s+problemas/i.test(t)) {
+    return { ventas180d: ventas, problemas180d: 0, situacion: "sin-problemas" };
+  }
+
+  const mProb = /tuviste\s+(\d[\d.]*|un[ao]?)\s+problemas?/i.exec(t);
+  const problemas = mProb
+    ? (PALABRA_NUM[mProb[1].toLowerCase()] ?? asNum(mProb[1]))
+    : null;
+
+  if (problemas === null) {
+    // Texto que no reconocemos: mejor decir que no se pudo leer que inventar un 0.
+    return { ventas180d: ventas, problemas180d: null, situacion: "sin-datos" };
+  }
   return {
-    id: item.id,
-    titulo: exp.title || item.title,
-    sku: parseSellerSku(item.seller_sku) ?? skuPorItem?.get(item.id) ?? null,
-    permalink: exp.permalink ?? item.permalink,
-    thumbnail: item.thumbnail,
-    score,
-    // El nivel lo manda ML; si viniera vacío se deduce del puntaje.
-    nivel: exp.experience_level || nivelDe(score),
-    semaforo: semaforoDe(score),
-    precio: exp.price ?? item.price,
-    disponibles: exp.available_quantity ?? item.available_quantity,
-    vendidasHistorico: exp.sold_quantity ?? item.sold_quantity,
-    visitas30d: exp.visits_30d,
-    reviews: { total: exp.reviews_summary.total, promedio: exp.reviews_summary.avg },
-    problemas: problemasDe(exp.checks),
+    ventas180d: ventas,
+    problemas180d: problemas,
+    situacion: problemas > 0 ? "con-problemas" : "sin-problemas",
   };
 }
 
-// ------------------------------------------------------------ ventas/reclamos
+function parseProblema(raw: unknown): ProblemaTipo | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const categoria = asStr(o.categoria) ?? asStr(o.tipo) ?? asStr(o.detalle);
+  if (!categoria) return null; // sin categoría no hay problema que mostrar
+  const reclamos = asNum(o.reclamos);
+  const cantidad = parseCantidad(asStr(o.cantidad)) || reclamos || 0;
+  return {
+    codigo: asStr(o.codigo),
+    categoria,
+    detalle: asStr(o.detalle),
+    cantidad,
+    // Si ML no manda `reclamos`, la cantidad del texto es la mejor cuenta que hay.
+    reclamos: reclamos ?? cantidad,
+    cancelaciones: asNum(o.cancelaciones) ?? 0,
+    principal: o.principal === true,
+    comoMejorar: asStr(o.solucion) ?? asStr(o.comoMejorar),
+    accion: asStr(o.accion),
+  };
+}
 
-/** Ventas y reclamos de un SKU unificado (vienen de la BD, no de ML live). */
-export type VentasReclamos = {
-  unidades30d: number;
-  unidades90d: number;
-  ordenes90d: number;
-  canceladas90d: number; // unidades en órdenes canceladas
-  reclamos90d: number; // 0 mientras ML no habilite el sync de reclamos
-};
+function parseDetalle(raw: unknown): DetallePub | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const resumen = asStr(o.resumen);
+  const { ventas180d, problemas180d, situacion } = parseResumen(resumen);
 
-export const SIN_VENTAS: VentasReclamos = {
-  unidades30d: 0,
-  unidades90d: 0,
-  ordenes90d: 0,
-  canceladas90d: 0,
-  reclamos90d: 0,
-};
+  const problemas = Array.isArray(o.problemas)
+    ? o.problemas.map(parseProblema).filter((p): p is ProblemaTipo => p !== null)
+    : [];
+  problemas.sort(compararProblemas);
 
-// ----------------------------------------------------------- SKU unificado
+  // ML manda -1 en el puntaje cuando no lo calculó (publicación sin ventas).
+  const scoreCrudo = asNum(o.score);
+  const score = scoreCrudo !== null && scoreCrudo >= 0 ? scoreCrudo : null;
 
-/** Un aspecto problemático a nivel grupo, con a cuántas publicaciones afecta. */
-export type ProblemaGrupo = Problema & { publicaciones: number };
+  return {
+    score,
+    nivel: asStr(o.nivel),
+    resumen,
+    aviso: asStr(o.aviso),
+    ventas180d,
+    problemas180d: problemas180d ?? (problemas.length > 0 ? sumaReclamos(problemas) : null),
+    // Si el texto no se entendió pero hay problemas listados, la situación es clara.
+    situacion: situacion === "sin-datos" && problemas.length > 0 ? "con-problemas" : situacion,
+    dist: Array.isArray(o.dist) ? o.dist.map(asStr).filter((s): s is string => s !== null) : [],
+    problemas,
+  };
+}
 
-export type ExperienciaItem = {
-  /** Código unificado: el código base del SKU, o el MLU si la publicación no tiene SKU. */
-  codigo: string;
-  sinSku: boolean;
-  titulo: string;
-  thumbnail: string | null;
-  skus: string[]; // los SKU completos que caen en el grupo
-  publicaciones: PubExperiencia[];
-  scorePeor: number; // el de la publicación más floja (manda el semáforo)
-  scorePromedio: number;
-  semaforo: Semaforo;
-  nivel: string;
-  problemaPrincipal: ProblemaGrupo | null;
-  problemas: ProblemaGrupo[];
-  ventas: VentasReclamos;
-  visitas30d: number;
-  vendidasHistorico: number;
-  reviews: { total: number; promedio: number | null };
-  prioridad: number;
-};
+const sumaReclamos = (ps: ProblemaTipo[]) => ps.reduce((s, p) => s + p.reclamos, 0);
+
+/** El problema principal primero, y después los que más reclamos acumulan. */
+function compararProblemas(a: ProblemaTipo, b: ProblemaTipo): number {
+  if (a.principal !== b.principal) return a.principal ? -1 : 1;
+  if (a.reclamos !== b.reclamos) return b.reclamos - a.reclamos;
+  return a.categoria.localeCompare(b.categoria, "es");
+}
+
+/** SKU normalizado: sin espacios y en mayúsculas, para que agrupe parejo. */
+export function normalizarSku(sku: unknown): string | null {
+  const s = asStr(sku);
+  return s ? s.toUpperCase() : null;
+}
 
 /**
- * Score de prioridad: cuántos puntos hay para recuperar, amplificado por lo que
- * ese producto mueve (visitas y ventas de los últimos 30 días). Una publicación
- * floja que nadie mira puede esperar; una floja que se vende todos los días no.
+ * Normaliza la captura del panel. Acepta VARIAS listas y las mergea por id de
+ * publicación: la captura del listado trae el % de experiencia y la URL de las
+ * 2200 publicaciones, y la del diagnóstico trae el detalle (`ml`) solo de las
+ * que están por debajo de 100. Lo último que llega gana, así que el detalle
+ * pisa lo que faltaba.
  */
-function prioridadDe(faltan: number, visitas30d: number, unidades30d: number): number {
-  const movimiento = 1 + Math.log10(visitas30d + unidades30d * 10 + 1);
-  return Math.round(faltan * movimiento * 10);
-}
+export function parseCaptura(...listas: unknown[]): CapturaPub[] {
+  const porId = new Map<string, CapturaPub>();
 
-/** Promedio de estrellas ponderado por cantidad de opiniones. */
-function promedioReviews(pubs: PubExperiencia[]): { total: number; promedio: number | null } {
-  let total = 0;
-  let suma = 0;
-  for (const p of pubs) {
-    if (p.reviews.total > 0 && p.reviews.promedio !== null) {
-      suma += p.reviews.promedio * p.reviews.total;
-      total += p.reviews.total;
+  for (const lista of listas) {
+    if (!Array.isArray(lista)) continue;
+    for (const raw of lista) {
+      if (!raw || typeof raw !== "object") continue;
+      const o = raw as Record<string, unknown>;
+      const id = asStr(o.id);
+      if (!id) continue; // sin id no hay con qué mergear
+
+      const prev = porId.get(id);
+      const detalle = parseDetalle(o.ml ?? o.detalle) ?? prev?.detalle ?? null;
+      // El -1 de ML no es un puntaje bajísimo: es "no lo calculé".
+      const expCruda = asNum(o.exp) ?? asNum(o.experiencia);
+      const experiencia =
+        expCruda !== null && expCruda >= 0 ? expCruda : (prev?.experiencia ?? null);
+      porId.set(id, {
+        id,
+        titulo: asStr(o.titulo) ?? asStr(o.title) ?? prev?.titulo ?? id,
+        sku: normalizarSku(o.sku) ?? prev?.sku ?? null,
+        estadoMl: asStr(o.estado) ?? prev?.estadoMl ?? null,
+        catalogo: o.catalogo === true || prev?.catalogo === true,
+        stock: asStr(o.stock) ?? prev?.stock ?? null,
+        precio: asStr(o.precio) ?? prev?.precio ?? null,
+        calidad: asNum(o.cal) ?? asNum(o.calidad) ?? prev?.calidad ?? null,
+        experiencia,
+        sinCalcular: experiencia === null && (expCruda !== null || prev?.sinCalcular === true),
+        url: asStr(o.url) ?? asStr(o.permalink) ?? prev?.url ?? null,
+        detalle,
+      });
     }
   }
-  return { total, promedio: total > 0 ? Math.round((suma / total) * 10) / 10 : null };
+
+  return [...porId.values()];
 }
 
-/** Junta los problemas de todas las publicaciones del grupo, sin repetir. */
-function problemasDelGrupo(pubs: PubExperiencia[]): ProblemaGrupo[] {
-  const porCode = new Map<string, ProblemaGrupo>();
-  for (const p of pubs) {
-    for (const pr of p.problemas) {
-      const prev = porCode.get(pr.code);
-      if (!prev) {
-        porCode.set(pr.code, { ...pr, publicaciones: 1 });
-        continue;
-      }
-      prev.publicaciones += 1;
-      // Si en una publicación está peor, manda el peor caso.
-      if (pr.status === "bad" && prev.status === "warn") {
-        porCode.set(pr.code, { ...pr, publicaciones: prev.publicaciones });
-      }
-    }
-  }
-  // A igualdad de peso, primero lo que afecta a más publicaciones del grupo.
-  return [...porCode.values()].sort(
-    (a, b) => compararProblemas(a, b) || b.publicaciones - a.publicaciones,
-  );
+// --------------------------------------------------------------- SKU agrupado
+
+/** Una publicación dentro de la fila del SKU. */
+export type PubDelSku = {
+  id: string;
+  titulo: string;
+  url: string | null;
+  experiencia: number | null;
+  calidad: number | null;
+  estadoMl: string | null;
+  stock: string | null;
+  precio: string | null;
+  catalogo: boolean;
+};
+
+export type ExperienciaSku = {
+  /** El SKU, o el MLU cuando la publicación no tiene SKU cargado en ML. */
+  clave: string;
+  sku: string | null;
+  sinSku: boolean;
+  titulo: string;
+  /** % de experiencia del listado (el peor entre las publicaciones hermanas). */
+  experiencia: number | null;
+  semaforo: Semaforo;
+  /** Mala | Media | Buena, tal como lo nombra ML. */
+  nivel: string | null;
+  score: number | null;
+  situacion: Situacion;
+  /** Ventas de los últimos 180 días según ML (las que usó para el puntaje). */
+  ventas180d: number | null;
+  /** Ventas de los últimos 180 días según nuestra base (ML no siempre las dice). */
+  ventasBd180d: number | null;
+  problemas180d: number;
+  reclamos: number;
+  cancelaciones: number;
+  tiposProblema: number;
+  problemaPrincipal: ProblemaTipo | null;
+  /** Lo que va en la columna: la categoría, o por qué no hay problema principal. */
+  problemaPrincipalTexto: string;
+  comoMejorar: string | null;
+  problemas: ProblemaTipo[];
+  dist: string[];
+  aviso: string | null;
+  publicaciones: PubDelSku[];
+};
+
+const pubDelSku = (p: CapturaPub): PubDelSku => ({
+  id: p.id,
+  titulo: p.titulo,
+  url: p.url,
+  experiencia: p.experiencia,
+  calidad: p.calidad,
+  estadoMl: p.estadoMl,
+  stock: p.stock,
+  precio: p.precio,
+  catalogo: p.catalogo,
+});
+
+/**
+ * Cuál de las publicaciones hermanas manda. Comparten SKU, así que ML les da los
+ * mismos reclamos y el mismo consejo; lo único que cambia es cuánto llegó a
+ * leerse. Se elige la que más información trae (medido en la captura: de los 60
+ * SKU con más de una publicación, 58 son idénticos y los 2 restantes difieren
+ * solo porque a una hermana no se le pudo leer el detalle).
+ */
+function mejorDetalle(pubs: CapturaPub[]): CapturaPub {
+  const puntos = (p: CapturaPub) => {
+    const d = p.detalle;
+    if (!d) return -1;
+    return (
+      (d.problemas.length > 0 ? 1000 : 0) +
+      (d.situacion !== "sin-datos" ? 100 : 0) +
+      (d.ventas180d !== null ? 10 : 0) +
+      (d.score !== null ? 1 : 0)
+    );
+  };
+  return [...pubs].sort((a, b) => puntos(b) - puntos(a))[0];
 }
 
-/** Agrupa las publicaciones evaluadas en filas por SKU unificado. */
+/**
+ * Agrupa las publicaciones capturadas en filas por SKU.
+ *
+ * `ventasBdPorSku` son las ventas de 180 días de nuestra base, por SKU completo:
+ * sirven para las publicaciones a las que ML no les informa las ventas (el texto
+ * "No tuviste problemas con este producto" no trae número).
+ */
 export function agruparPorSku(
-  pubs: PubExperiencia[],
-  ventasPorCodigo: Map<string, VentasReclamos> = new Map(),
-): ExperienciaItem[] {
-  const grupos = new Map<string, PubExperiencia[]>();
+  pubs: CapturaPub[],
+  ventasBdPorSku: Map<string, number> = new Map(),
+  rojoHasta = 30,
+): ExperienciaSku[] {
+  const grupos = new Map<string, CapturaPub[]>();
   for (const p of pubs) {
-    const clave = p.sku ? codigoBase(p.sku) : p.id;
+    // Sin SKU no hay con qué unificar: cada publicación es su propia fila.
+    const clave = p.sku ?? p.id;
     const g = grupos.get(clave);
     if (g) g.push(p);
     else grupos.set(clave, [p]);
   }
 
-  const out: ExperienciaItem[] = [];
-  for (const [codigo, lista] of grupos) {
-    // Peor primero: la publicación más floja es la que hay que mirar.
-    const ordenadas = [...lista].sort((a, b) => a.score - b.score);
-    const scorePeor = ordenadas[0].score;
-    const scorePromedio = Math.round(ordenadas.reduce((s, p) => s + p.score, 0) / ordenadas.length);
-    const problemas = problemasDelGrupo(ordenadas);
-    const ventas = ventasPorCodigo.get(codigo) ?? SIN_VENTAS;
-    const visitas30d = ordenadas.reduce((s, p) => s + (p.visitas30d ?? 0), 0);
-    const sinSku = !ordenadas.some((p) => p.sku);
+  const out: ExperienciaSku[] = [];
+  for (const [clave, lista] of grupos) {
+    const dueño = mejorDetalle(lista);
+    const d = dueño.detalle;
+    const problemas = d?.problemas ?? [];
+    const principal = problemas.find((p) => p.principal) ?? problemas[0] ?? null;
+    const situacion = d?.situacion ?? "sin-datos";
 
+    // El peor % del listado entre las hermanas: es el que hay que mirar.
+    const exps = lista.map((p) => p.experiencia).filter((n): n is number => n !== null);
+    const experiencia = exps.length > 0 ? Math.min(...exps) : null;
+
+    const sku = dueño.sku;
     out.push({
-      codigo,
-      sinSku,
-      // El título de la publicación más floja: es la que se va a abrir.
-      titulo: ordenadas[0].titulo,
-      thumbnail: ordenadas.find((p) => p.thumbnail)?.thumbnail ?? null,
-      skus: [...new Set(ordenadas.map((p) => p.sku).filter((s): s is string => !!s))].sort(),
-      publicaciones: ordenadas,
-      scorePeor,
-      scorePromedio,
-      semaforo: semaforoDe(scorePeor),
-      nivel: ordenadas[0].nivel,
-      problemaPrincipal: problemas[0] ?? null,
+      clave,
+      sku,
+      sinSku: sku === null,
+      titulo: dueño.titulo,
+      experiencia,
+      semaforo: semaforoDe(experiencia, rojoHasta),
+      nivel: d?.nivel ?? null,
+      score: d?.score ?? null,
+      situacion,
+      ventas180d: d?.ventas180d ?? null,
+      ventasBd180d: sku ? (ventasBdPorSku.get(sku) ?? null) : null,
+      problemas180d: d?.problemas180d ?? 0,
+      reclamos: sumaReclamos(problemas),
+      cancelaciones: problemas.reduce((s, p) => s + p.cancelaciones, 0),
+      tiposProblema: problemas.length,
+      problemaPrincipal: principal,
+      problemaPrincipalTexto: principal?.categoria ?? TEXTO_SITUACION[situacion],
+      comoMejorar: principal?.comoMejorar ?? null,
       problemas,
-      ventas,
-      visitas30d,
-      vendidasHistorico: ordenadas.reduce((s, p) => s + (p.vendidasHistorico ?? 0), 0),
-      reviews: promedioReviews(ordenadas),
-      prioridad: prioridadDe(EXPERIENCIA_MAX - scorePeor, visitas30d, ventas.unidades30d),
+      dist: d?.dist ?? [],
+      aviso: d?.aviso ?? null,
+      publicaciones: lista.map(pubDelSku),
     });
   }
 
-  // Lo más urgente primero; a igualdad, el peor puntaje.
-  out.sort((a, b) => b.prioridad - a.prioridad || a.scorePeor - b.scorePeor);
+  out.sort(compararSkus);
   return out;
 }
 
-// -------------------------------------------------------------------- params
+/**
+ * Orden del reporte: primero los rojos (ML puede pausarlos), después lo que más
+ * reclamos acumula y, a igualdad, lo que más se vende — un SKU con 2 reclamos y
+ * 400 ventas urge más que uno con 2 reclamos y 5 ventas.
+ */
+export function compararSkus(a: ExperienciaSku, b: ExperienciaSku): number {
+  const rojoA = a.semaforo === "rojo" ? 0 : 1;
+  const rojoB = b.semaforo === "rojo" ? 0 : 1;
+  if (rojoA !== rojoB) return rojoA - rojoB;
+  if (a.reclamos !== b.reclamos) return b.reclamos - a.reclamos;
+  const va = a.ventas180d ?? a.ventasBd180d ?? 0;
+  const vb = b.ventas180d ?? b.ventasBd180d ?? 0;
+  if (va !== vb) return vb - va;
+  return a.clave.localeCompare(b.clave, "es");
+}
+
+// --------------------------------------------------------------------- params
 
 export type ExperienciaParams = {
-  /** Se listan las publicaciones con puntaje por debajo de esto (100 = todas las imperfectas). */
+  /** Se listan las publicaciones con experiencia por debajo de esto. */
   umbral: number;
-  /** Puntos que tiene que caer un puntaje para que salga el mail. */
-  minCaida: number;
+  /** Hasta qué % la fila va en rojo. */
+  rojoHasta: number;
+  /** Reclamos nuevos mínimos para que salga el mail de aviso. */
+  minReclamos: number;
 };
 
-/**
- * El mínimo de 14 puntos NO es un número al azar: está calibrado contra una
- * inconsistencia medida en la API.
- *
- * `/ml-experiencia` devuelve distinto puntaje para la MISMA publicación según
- * cómo se lo pida: leída dentro del barrido de las 817 activas da hasta 13
- * puntos menos que leída de a una, y lo hace de forma consistente (idéntico a
- * concurrencia 4, 8 y 24; la lectura individual es estable en 6 intentos
- * seguidos). Los saltos que produce son siempre de 13 o de 6 puntos.
- *
- * Con el mínimo en 14 esas diferencias no generan mails, y lo que sí se avisa es
- * la pérdida de un aspecto entero (fotos y opiniones valen 15, la ficha 25). Es
- * un parche del lado del panel: lo correcto sería que la API devuelva el mismo
- * puntaje siempre. Cuando eso se arregle, se puede bajar a 5 desde la pantalla.
- */
 export const DEFAULT_EXPERIENCIA_PARAMS: ExperienciaParams = {
   umbral: EXPERIENCIA_MAX,
-  minCaida: 14,
+  rojoHasta: 30,
+  minReclamos: 1,
 };
 
 /** Normaliza params parciales (ej. los guardados en la config) con defaults. */
@@ -456,320 +518,322 @@ export function normalizeExperienciaParams(
   };
   return {
     umbral: clamp(src.umbral, DEFAULT_EXPERIENCIA_PARAMS.umbral, 1, EXPERIENCIA_MAX),
-    minCaida: clamp(src.minCaida, DEFAULT_EXPERIENCIA_PARAMS.minCaida, 1, EXPERIENCIA_MAX),
+    rojoHasta: clamp(src.rojoHasta, DEFAULT_EXPERIENCIA_PARAMS.rojoHasta, 0, EXPERIENCIA_MAX),
+    minReclamos: clamp(src.minReclamos, DEFAULT_EXPERIENCIA_PARAMS.minReclamos, 1, 999),
   };
 }
 
 // -------------------------------------------------------------------- reporte
 
-/** Reputación del vendedor: los reclamos que ML sí informa (globales, 120 días). */
-export type ReputacionResumen = {
-  nivel: string | null;
-  powerSeller: string | null;
-  reclamos120d: number;
-  reclamosTasaPct: string | null;
-  demoras120d: number;
-  demorasTasaPct: string | null;
-  cancelaciones120d: number;
-  cancelacionesTasaPct: string | null;
-  ventasCompletadas120d: number | null;
+/** Un tipo de problema visto desde arriba: a cuántos SKU afecta y cuánto pesa. */
+export type ProblemaRanking = {
+  categoria: string;
+  skus: number;
+  reclamos: number;
+  ventas180d: number;
+  comoMejorar: string | null;
+};
+
+export type ExperienciaSummary = {
+  /** Publicaciones que trae la captura (todo el catálogo). */
+  publicacionesCapturadas: number;
+  /** Publicaciones por debajo del umbral (las que entran al reporte). */
+  publicaciones: number;
+  /**
+   * Publicaciones que quedaron afuera porque ML no les puso puntaje: no
+   * vendieron nada en la ventana. No es un problema de experiencia, pero se
+   * informa para que el total cierre.
+   */
+  sinPuntaje: number;
+  /** Publicaciones cuya fila del listado no se pudo leer en la captura. */
+  noLeidas: number;
+  /** SKU listados. */
+  skus: number;
+  rojo: number;
+  amarillo: number;
+  conReclamos: number;
+  sinReclamos: number;
+  reclamosTotales: number;
+  cancelacionesTotales: number;
+  sinVentas: number;
+  sinDatos: number;
+  /** Unidades vendidas en 180 días de los SKU con reclamos. */
+  ventasConReclamos: number;
+  /** Los tipos de problema ordenados por reclamos: por dónde empezar. */
+  ranking: ProblemaRanking[];
 };
 
 export type ExperienciaReport = {
   key: typeof EXPERIENCIA_KEY;
+  /** Cuándo se sacó la captura del panel. */
+  capturadoEn: string;
+  /** Cuándo se armó este reporte. */
   generadoEn: string;
   params: ExperienciaParams;
-  fallidos?: number; // publicaciones cuya experiencia no se pudo traer
-  /**
-   * false cuando la tabla `ml_claims` está vacía: ML todavía no habilitó el
-   * permiso de reclamos, así que los reclamos POR PUBLICACIÓN no existen y solo
-   * se puede mostrar el total del vendedor que viene en `reputacion`.
-   */
-  reclamosPorSkuDisponibles: boolean;
-  reputacion: ReputacionResumen | null;
-  items: ExperienciaItem[];
-  summary: {
-    activas: number; // publicaciones activas evaluadas
-    perfectas: number; // con 100 de puntaje
-    aMejorar: number; // por debajo del umbral
-    codigos: number; // SKU unificados listados
-    scorePromedio: number | null;
-    rojo: number;
-    naranja: number;
-    amarillo: number;
-    verde: number;
-    conInfracciones: number;
-    visitas30dEnRiesgo: number;
-    unidades30dEnRiesgo: number;
-    /** Puntos en juego sumados: cuánto hay para recuperar en total. */
-    puntosEnJuego: number;
-  };
+  items: ExperienciaSku[];
+  summary: ExperienciaSummary;
 };
 
-/** Núcleo del reporte: evalúa, filtra por umbral y agrupa. Puro → testeable. */
-export function evaluarExperiencia(
-  rows: { item: MlItem; exp: MlExperiencia | null }[],
-  opts: {
-    generadoEn: string;
-    params: ExperienciaParams;
-    ventasPorCodigo?: Map<string, VentasReclamos>;
-    /** Puente item_id→SKU para las publicaciones que no traen `seller_sku`. */
-    skuPorItem?: Map<string, string>;
-    reputacion?: ReputacionResumen | null;
-    reclamosPorSkuDisponibles?: boolean;
-    fallidos?: number;
-  },
-): ExperienciaReport {
-  const { params } = opts;
-  const evaluadas: PubExperiencia[] = [];
-  for (const r of rows) {
-    if (!r.exp) continue; // sin experiencia no hay nada que evaluar
-    evaluadas.push(toPublicacion(r.item, r.exp, opts.skuPorItem));
-  }
-
-  const perfectas = evaluadas.filter((p) => p.score >= EXPERIENCIA_MAX).length;
-  const aMejorar = evaluadas.filter((p) => p.score < params.umbral);
-  const items = agruparPorSku(aMejorar, opts.ventasPorCodigo);
-
-  const scorePromedio =
-    evaluadas.length > 0
-      ? Math.round(evaluadas.reduce((s, p) => s + p.score, 0) / evaluadas.length)
-      : null;
-
+/** Resumen del reporte: los KPI de la pantalla y la hoja "Resumen" del Excel. */
+export function resumirExperiencia(
+  items: ExperienciaSku[],
+  opts: { publicacionesCapturadas: number; sinPuntaje?: number; noLeidas?: number },
+): ExperienciaSummary {
   let rojo = 0;
-  let naranja = 0;
   let amarillo = 0;
-  let verde = 0;
-  let conInfracciones = 0;
-  let visitas30dEnRiesgo = 0;
-  let unidades30dEnRiesgo = 0;
-  let puntosEnJuego = 0;
+  let conReclamos = 0;
+  let reclamosTotales = 0;
+  let cancelacionesTotales = 0;
+  let sinVentas = 0;
+  let sinDatos = 0;
+  let ventasConReclamos = 0;
+  let publicaciones = 0;
+
+  // El ranking agrupa los SKU por su PROBLEMA PRINCIPAL y suma los reclamos del
+  // SKU entero: es la lista de "arreglá esto y se van tantos reclamos".
+  const porCategoria = new Map<string, ProblemaRanking>();
+
   for (const it of items) {
+    publicaciones += it.publicaciones.length;
     if (it.semaforo === "rojo") rojo += 1;
-    else if (it.semaforo === "naranja") naranja += 1;
     else if (it.semaforo === "amarillo") amarillo += 1;
-    else verde += 1;
-    if (it.problemas.some((p) => p.code === "infracciones")) conInfracciones += 1;
-    visitas30dEnRiesgo += it.visitas30d;
-    unidades30dEnRiesgo += it.ventas.unidades30d;
-    puntosEnJuego += EXPERIENCIA_MAX - it.scorePeor;
-  }
+    if (it.situacion === "sin-ventas") sinVentas += 1;
+    if (it.situacion === "sin-datos") sinDatos += 1;
+    cancelacionesTotales += it.cancelaciones;
 
-  return {
-    key: EXPERIENCIA_KEY,
-    generadoEn: opts.generadoEn,
-    params,
-    fallidos: opts.fallidos || undefined,
-    reclamosPorSkuDisponibles: opts.reclamosPorSkuDisponibles ?? false,
-    reputacion: opts.reputacion ?? null,
-    items,
-    summary: {
-      activas: evaluadas.length,
-      perfectas,
-      aMejorar: aMejorar.length,
-      codigos: items.length,
-      scorePromedio,
-      rojo,
-      naranja,
-      amarillo,
-      verde,
-      conInfracciones,
-      visitas30dEnRiesgo,
-      unidades30dEnRiesgo,
-      puntosEnJuego,
-    },
-  };
-}
+    if (it.reclamos > 0) {
+      conReclamos += 1;
+      reclamosTotales += it.reclamos;
+      ventasConReclamos += it.ventas180d ?? it.ventasBd180d ?? 0;
+    }
 
-// ---------------------------------------------------------- caídas de puntaje
-
-/**
- * Puntaje guardado de una publicación en la corrida anterior. Es lo que permite
- * saber si bajó: sin esto no hay con qué comparar.
- */
-export type PuntajePrevio = { itemId: string; score: number };
-
-/** Una publicación que empeoró: es lo que se avisa por mail y se marca en el panel. */
-export type Caida = {
-  itemId: string;
-  codigo: string; // SKU unificado al que pertenece
-  sku: string | null;
-  titulo: string;
-  permalink: string | null;
-  scoreAnterior: number;
-  score: number;
-  delta: number; // puntos que bajó (positivo)
-  nivelAnterior: string;
-  nivel: string;
-  /** true cuando venía en 100 y dejó de estar perfecta (el cruce del 100%). */
-  cruzo100: boolean;
-  problemaPrincipal: string | null;
-};
-
-/**
- * Compara el puntaje actual contra el de la corrida anterior y devuelve las
- * caídas CANDIDATAS a avisar.
- *
- * Se llaman candidatas porque todavía hay que confirmarlas: ver
- * `confirmarCaidas`. El barrido pide la experiencia de las ~800 publicaciones
- * en paralelo y, bajo esa carga, algunas respuestas de MercadoLibre vuelven
- * incompletas (un aspecto que llega sin datos hace caer el puntaje ~13 puntos
- * sin que la publicación haya cambiado en nada).
- *
- * Dos decisiones más:
- *
- * - **La primera corrida no avisa.** Si una publicación no tiene puntaje previo
- *   no hay caída: se guarda la foto inicial y listo. Sin esto, el primer envío
- *   serían ~800 mails de publicaciones que ya estaban flojas desde antes.
- * - **Umbral mínimo.** Los puntajes se mueven solos (una opinión nueva, un
- *   cambio de stock), así que una caída de menos de `minCaida` puntos no se
- *   avisa. El cruce del 100% sí se avisa siempre, aunque sea de un punto: dejar
- *   de estar perfecta es la señal que se pidió.
- */
-export function detectarCaidas(
-  items: ExperienciaItem[],
-  previos: PuntajePrevio[],
-  minCaida: number,
-): Caida[] {
-  const antes = new Map(previos.map((p) => [p.itemId, p.score]));
-  const out: Caida[] = [];
-  for (const grupo of items) {
-    for (const pub of grupo.publicaciones) {
-      const scoreAnterior = antes.get(pub.id);
-      if (scoreAnterior === undefined) continue; // publicación nueva: solo se guarda
-      const delta = scoreAnterior - pub.score;
-      if (delta <= 0) continue; // igual o mejor
-      const cruzo100 = scoreAnterior >= EXPERIENCIA_MAX && pub.score < EXPERIENCIA_MAX;
-      if (delta < minCaida && !cruzo100) continue;
-      out.push({
-        itemId: pub.id,
-        codigo: grupo.codigo,
-        sku: pub.sku,
-        titulo: pub.titulo,
-        permalink: pub.permalink,
-        scoreAnterior,
-        score: pub.score,
-        delta,
-        nivelAnterior: nivelDe(scoreAnterior),
-        nivel: pub.nivel,
-        cruzo100,
-        problemaPrincipal: pub.problemas[0]?.label ?? null,
+    const cat = it.problemaPrincipal?.categoria;
+    if (!cat) continue;
+    const prev = porCategoria.get(cat);
+    if (prev) {
+      prev.skus += 1;
+      prev.reclamos += it.reclamos;
+      prev.ventas180d += it.ventas180d ?? it.ventasBd180d ?? 0;
+    } else {
+      porCategoria.set(cat, {
+        categoria: cat,
+        skus: 1,
+        reclamos: it.reclamos,
+        ventas180d: it.ventas180d ?? it.ventasBd180d ?? 0,
+        comoMejorar: it.comoMejorar,
       });
     }
   }
-  // Lo que más bajó primero; el cruce del 100% siempre arriba.
-  out.sort((a, b) => Number(b.cruzo100) - Number(a.cruzo100) || b.delta - a.delta);
-  return out;
+
+  const ranking = [...porCategoria.values()].sort(
+    (a, b) => b.reclamos - a.reclamos || b.skus - a.skus,
+  );
+
+  return {
+    publicacionesCapturadas: opts.publicacionesCapturadas,
+    publicaciones,
+    sinPuntaje: opts.sinPuntaje ?? 0,
+    noLeidas: opts.noLeidas ?? 0,
+    skus: items.length,
+    rojo,
+    amarillo,
+    conReclamos,
+    sinReclamos: items.length - conReclamos,
+    reclamosTotales,
+    cancelacionesTotales,
+    sinVentas,
+    sinDatos,
+    ventasConReclamos,
+    ranking,
+  };
 }
 
-/** Una caída detectada en una corrida anterior, todavía sin confirmar. */
-export type CaidaPendiente = {
-  itemId: string;
-  /** Puntaje que tenía antes de caer. */
-  bajoDe: number;
-  /** Puntaje con el que se detectó la caída. */
-  score: number;
+/**
+ * Las publicaciones que entran al reporte: las que TIENEN puntaje y está por
+ * debajo del umbral. Se usa también para reconstruir la captura anterior cuando
+ * hay que comparar, así los dos lados se filtran igual.
+ */
+export function filtrarAMejorar(pubs: CapturaPub[], umbral: number): CapturaPub[] {
+  return pubs.filter((p) => p.experiencia !== null && p.experiencia < umbral);
+}
+
+/**
+ * Núcleo del reporte: filtra por umbral, agrupa por SKU y resume. Puro →
+ * testeable.
+ *
+ * El filtro se aplica sobre el % del LISTADO: es el número que el panel muestra
+ * en la lista de publicaciones y el que ML usa para ordenarlas.
+ *
+ * Las publicaciones SIN puntaje quedan afuera a propósito. Son la mayoría del
+ * catálogo (715 de 2213 en la captura del 29/07) y no tienen mala experiencia:
+ * ML no les calculó nada porque no vendieron en la ventana de 180 días. Meterlas
+ * ahogaría el reporte con cientos de filas que no hay cómo mejorar. Cuántas son
+ * queda informado en el resumen.
+ */
+export function evaluarExperiencia(
+  pubs: CapturaPub[],
+  opts: {
+    capturadoEn: string;
+    generadoEn: string;
+    params: ExperienciaParams;
+    ventasBdPorSku?: Map<string, number>;
+  },
+): ExperienciaReport {
+  const { params } = opts;
+  const items = agruparPorSku(
+    filtrarAMejorar(pubs, params.umbral),
+    opts.ventasBdPorSku,
+    params.rojoHasta,
+  );
+
+  return {
+    key: EXPERIENCIA_KEY,
+    capturadoEn: opts.capturadoEn,
+    generadoEn: opts.generadoEn,
+    params,
+    items,
+    summary: resumirExperiencia(items, {
+      publicacionesCapturadas: pubs.length,
+      sinPuntaje: pubs.filter((p) => p.experiencia === null && p.sinCalcular).length,
+      noLeidas: pubs.filter((p) => p.experiencia === null && !p.sinCalcular).length,
+    }),
+  };
+}
+
+// ------------------------------------------------------------------- cambios
+
+/**
+ * Un SKU que se movió entre dos capturas. Es lo que se avisa por mail: los
+ * reclamos solo suben (la ventana de 180 días los va soltando de a poco), así
+ * que un salto en los reclamos es un problema nuevo de esta semana.
+ */
+export type CambioSku = {
+  clave: string;
+  sku: string | null;
+  titulo: string;
+  url: string | null;
+  reclamosAntes: number;
+  reclamos: number;
+  deltaReclamos: number;
+  experienciaAntes: number | null;
+  experiencia: number | null;
+  deltaExperiencia: number | null;
+  nivelAntes: string | null;
+  nivel: string | null;
+  problemaPrincipal: string;
+  comoMejorar: string | null;
+  /** true cuando el SKU no estaba en la captura anterior. */
+  nuevo: boolean;
+  /** true cuando además cayó al rojo. */
+  cayoEnRojo: boolean;
 };
 
 /**
- * Decide cuáles de las caídas pendientes se confirman con la corrida de hoy.
+ * Compara la captura de hoy contra la anterior y devuelve los SKU que
+ * empeoraron: sumaron reclamos (al menos `minReclamos`) o perdieron puntos de
+ * experiencia. Los que mejoraron o quedaron igual no se informan.
  *
- * **Por qué hace falta una segunda corrida.** El puntaje que devuelve
- * `/ml-experiencia` depende del camino por el que se lo pide: medido contra la
- * API real, el barrido de las 817 publicaciones lee 11 de cada 25 con unos 13
- * puntos menos que si se piden de a una, y lo hace de forma consistente (idéntico
- * a concurrencia 4, 8 y 24, con la lectura individual estable en 3 y 6 intentos
- * seguidos). O sea: releer al toque no sirve para arbitrar, porque devuelve el
- * otro valor siempre.
- *
- * Lo que sí distingue una caída real de un artefacto de lectura es el tiempo: el
- * artefacto desaparece en cuanto la referencia guardada pasa a venir del mismo
- * barrido, mientras que una caída de verdad sigue ahí mañana. Entonces:
- *
- *  1. la primera vez que se ve una caída se marca en el panel y NO se manda mail;
- *  2. si en la corrida siguiente el puntaje sigue caído, se confirma y sale el mail;
- *  3. si se recuperó, la marca se borra sola y nunca hubo mail.
- *
- * `actual` es el puntaje que leyó esta corrida, por publicación.
+ * Un SKU que aparece por primera vez solo se avisa si ya trae reclamos: si no,
+ * el primer import avisaría de todo el catálogo.
  */
-export function confirmarPendientes(
-  pendientes: CaidaPendiente[],
-  actual: Map<string, PubExperiencia>,
-  minCaida: number,
-): Caida[] {
-  const out: Caida[] = [];
-  for (const p of pendientes) {
-    const pub = actual.get(p.itemId);
-    if (!pub) continue; // ya no está activa: no hay nada que avisar
-    // ¿Se recuperó? Entonces la caída era un artefacto o ya se arregló.
-    if (pub.score >= p.bajoDe) continue;
-    const delta = p.bajoDe - pub.score;
-    const cruzo100 = p.bajoDe >= EXPERIENCIA_MAX && pub.score < EXPERIENCIA_MAX;
-    if (delta < minCaida && !cruzo100) continue;
+export function compararCapturas(
+  actual: ExperienciaSku[],
+  anterior: ExperienciaSku[] | null,
+  minReclamos = 1,
+): CambioSku[] {
+  const antes = new Map((anterior ?? []).map((it) => [it.clave, it]));
+  const out: CambioSku[] = [];
+
+  for (const it of actual) {
+    const prev = antes.get(it.clave);
+    const reclamosAntes = prev?.reclamos ?? 0;
+    const deltaReclamos = it.reclamos - reclamosAntes;
+    const expAntes = prev?.experiencia ?? null;
+    const deltaExp =
+      expAntes !== null && it.experiencia !== null ? it.experiencia - expAntes : null;
+
+    const sumoReclamos = deltaReclamos >= minReclamos;
+    const bajoPuntaje = deltaExp !== null && deltaExp < 0;
+    if (!sumoReclamos && !bajoPuntaje) continue;
+    // Un SKU nuevo sin reclamos no es una noticia.
+    if (!prev && it.reclamos === 0) continue;
+
     out.push({
-      itemId: p.itemId,
-      codigo: pub.sku ? codigoBase(pub.sku) : pub.id,
-      sku: pub.sku,
-      titulo: pub.titulo,
-      permalink: pub.permalink,
-      scoreAnterior: p.bajoDe,
-      score: pub.score,
-      delta,
-      nivelAnterior: nivelDe(p.bajoDe),
-      nivel: pub.nivel,
-      cruzo100,
-      problemaPrincipal: pub.problemas[0]?.label ?? null,
+      clave: it.clave,
+      sku: it.sku,
+      titulo: it.titulo,
+      url: it.publicaciones[0]?.url ?? null,
+      reclamosAntes,
+      reclamos: it.reclamos,
+      deltaReclamos,
+      experienciaAntes: expAntes,
+      experiencia: it.experiencia,
+      deltaExperiencia: deltaExp,
+      nivelAntes: prev?.nivel ?? null,
+      nivel: it.nivel,
+      problemaPrincipal: it.problemaPrincipalTexto,
+      comoMejorar: it.comoMejorar,
+      nuevo: !prev,
+      cayoEnRojo: it.semaforo === "rojo" && prev?.semaforo !== "rojo",
     });
   }
-  out.sort((a, b) => Number(b.cruzo100) - Number(a.cruzo100) || b.delta - a.delta);
+
+  // Lo que cayó al rojo primero, después lo que más reclamos sumó.
+  out.sort(
+    (a, b) =>
+      Number(b.cayoEnRojo) - Number(a.cayoEnRojo) ||
+      b.deltaReclamos - a.deltaReclamos ||
+      (a.deltaExperiencia ?? 0) - (b.deltaExperiencia ?? 0),
+  );
   return out;
 }
 
-// ------------------------------------------------------------------ el mail
+// -------------------------------------------------------------------- el mail
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** Asunto del mail de alerta. */
-export function asuntoCaidas(caidas: Caida[]): string {
-  const n = caidas.length;
-  const cruces = caidas.filter((c) => c.cruzo100).length;
-  if (cruces > 0 && n === cruces) {
-    return `MA · ${n} publicación${n === 1 ? "" : "es"} dejó de estar en 100%`;
+/** Asunto del mail de aviso. */
+export function asuntoCambios(cambios: CambioSku[]): string {
+  const n = cambios.length;
+  const rojos = cambios.filter((c) => c.cayoEnRojo).length;
+  if (rojos > 0) {
+    return `MA · ${rojos} SKU con mala experiencia de compra (${n} empeoró${n === 1 ? "" : "aron"})`;
   }
-  const peor = caidas[0];
-  if (n === 1 && peor) {
-    return `MA · bajó la experiencia de compra: ${peor.titulo.slice(0, 60)} (${peor.scoreAnterior}% → ${peor.score}%)`;
+  if (n === 1) {
+    const c = cambios[0];
+    return `MA · empeoró la experiencia de compra: ${c.titulo.slice(0, 60)} (+${c.deltaReclamos} reclamo${c.deltaReclamos === 1 ? "" : "s"})`;
   }
-  return `MA · bajó la experiencia de compra de ${n} publicaciones`;
+  return `MA · empeoró la experiencia de compra de ${n} SKU`;
 }
 
 /**
- * Cuerpo del mail de alerta, en texto y HTML. Va autocontenido (sin imágenes ni
- * CSS externo) para que se vea igual en Gmail, Outlook y el celular.
- * `panelUrl` es el link a la pantalla del reporte, si se sabe.
+ * Cuerpo del mail, en texto y HTML. Va autocontenido (sin imágenes ni CSS
+ * externo) para que se vea igual en Gmail, Outlook y el celular.
  */
-export function cuerpoCaidas(
-  caidas: Caida[],
+export function cuerpoCambios(
+  cambios: CambioSku[],
   opts: { panelUrl?: string | null; max?: number } = {},
 ): { text: string; html: string } {
   const max = opts.max ?? 25;
-  const muestra = caidas.slice(0, max);
-  const resto = caidas.length - muestra.length;
+  const muestra = cambios.slice(0, max);
+  const resto = cambios.length - muestra.length;
 
   const lineas: string[] = [];
   lineas.push(
-    `Bajó la experiencia de compra de ${caidas.length} publicación${caidas.length === 1 ? "" : "es"}.`,
+    `Empeoró la experiencia de compra de ${cambios.length} SKU en los últimos ${VENTANA_DIAS} días.`,
   );
   lineas.push("");
   for (const c of muestra) {
-    const marca = c.cruzo100 ? " [dejó de estar en 100%]" : "";
-    lineas.push(`• ${c.titulo}${marca}`);
+    lineas.push(`• ${c.sku ?? c.clave} — ${c.titulo}${c.cayoEnRojo ? " [pasó a rojo]" : ""}`);
     lineas.push(
-      `  ${c.sku ?? c.itemId} · ${c.scoreAnterior}% → ${c.score}% (−${c.delta} pts, ${c.nivel})`,
+      `  Reclamos: ${c.reclamosAntes} → ${c.reclamos} (+${c.deltaReclamos})` +
+        (c.experiencia !== null ? ` · experiencia ${c.experienciaAntes ?? "—"}% → ${c.experiencia}%` : "") +
+        (c.nivel ? ` · ${c.nivel}` : ""),
     );
-    if (c.problemaPrincipal) lineas.push(`  Problema principal: ${c.problemaPrincipal}`);
-    if (c.permalink) lineas.push(`  ${c.permalink}`);
+    lineas.push(`  Problema principal: ${c.problemaPrincipal}`);
+    if (c.comoMejorar) lineas.push(`  ML pide: ${c.comoMejorar}`);
+    if (c.url) lineas.push(`  ${c.url}`);
     lineas.push("");
   }
   if (resto > 0) lineas.push(`… y ${resto} más.`);
@@ -780,25 +844,22 @@ export function cuerpoCaidas(
 
   const filas = muestra
     .map((c) => {
-      const color = c.score >= 60 ? "#f59e0b" : c.score >= 40 ? "#f97316" : "#ef4444";
-      const marca = c.cruzo100
-        ? ' <span style="background:#fee2e2;color:#991b1b;font-size:11px;padding:1px 5px;border-radius:4px">dejó el 100%</span>'
+      const marca = c.cayoEnRojo
+        ? ' <span style="background:#fee2e2;color:#991b1b;font-size:11px;padding:1px 5px;border-radius:4px">pasó a rojo</span>'
         : "";
-      const titulo = c.permalink
-        ? `<a href="${esc(c.permalink)}" style="color:#0f766e;text-decoration:none">${esc(c.titulo)}</a>`
+      const titulo = c.url
+        ? `<a href="${esc(c.url)}" style="color:#0f766e;text-decoration:none">${esc(c.titulo)}</a>`
         : esc(c.titulo);
       return `<tr>
   <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827">
     ${titulo}${marca}
-    <div style="color:#6b7280;font-size:12px;margin-top:2px">${esc(c.sku ?? c.itemId)}${
-      c.problemaPrincipal ? ` · ${esc(c.problemaPrincipal)}` : ""
-    }</div>
+    <div style="color:#6b7280;font-size:12px;margin-top:2px">${esc(c.sku ?? c.clave)} · ${esc(c.problemaPrincipal)}</div>
+    ${c.comoMejorar ? `<div style="color:#0f766e;font-size:12px;margin-top:4px">${esc(c.comoMejorar)}</div>` : ""}
   </td>
   <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">
-    <span style="color:#6b7280;font-size:13px">${c.scoreAnterior}%</span>
-    <span style="color:#9ca3af;font-size:13px"> → </span>
-    <span style="color:${color};font-size:15px;font-weight:700">${c.score}%</span>
-    <div style="color:#ef4444;font-size:12px">−${c.delta} pts</div>
+    <span style="color:#ef4444;font-size:15px;font-weight:700">+${c.deltaReclamos}</span>
+    <div style="color:#6b7280;font-size:12px">${c.reclamosAntes} → ${c.reclamos} reclamos</div>
+    ${c.experiencia !== null ? `<div style="color:#9ca3af;font-size:12px">${c.experienciaAntes ?? "—"}% → ${c.experiencia}%</div>` : ""}
   </td>
 </tr>`;
     })
@@ -807,10 +868,8 @@ export function cuerpoCaidas(
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f9fafb;padding:24px">
   <div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
     <div style="padding:18px 20px;background:#0f766e;color:#fff">
-      <div style="font-size:17px;font-weight:700">Bajó la experiencia de compra</div>
-      <div style="font-size:13px;opacity:.85;margin-top:2px">${caidas.length} publicación${
-        caidas.length === 1 ? "" : "es"
-      } por debajo de lo que venía</div>
+      <div style="font-size:17px;font-weight:700">Empeoró la experiencia de compra</div>
+      <div style="font-size:13px;opacity:.85;margin-top:2px">${cambios.length} SKU sumaron problemas de compradores</div>
     </div>
     <table style="width:100%;border-collapse:collapse">${filas}</table>
     ${
@@ -834,33 +893,36 @@ export function cuerpoCaidas(
   return { text: lineas.join("\n"), html };
 }
 
-/** Resumen del reporte en texto plano (para logs y para el WhatsApp si algún día se suma). */
+/** Resumen del reporte en texto plano, para logs. */
 export function experienciaToText(report: ExperienciaReport, max = 12): string {
   const { summary, items } = report;
   const lineas: string[] = [];
   lineas.push("Publicaciones con mala experiencia de compra");
   lineas.push(
-    `${summary.aMejorar} de ${summary.activas} activas por debajo de ${report.params.umbral}% ` +
-      `· ${summary.codigos} SKU · promedio ${summary.scorePromedio ?? "—"}%`,
+    `${summary.skus} SKU (${summary.publicaciones} publicaciones) por debajo de ${report.params.umbral}% ` +
+      `· ${summary.reclamosTotales} problemas en ${VENTANA_DIAS} días · ${summary.rojo} en rojo`,
   );
   lineas.push("");
   for (const it of items.slice(0, max)) {
-    lineas.push(`• ${it.codigo} ${it.titulo.slice(0, 45)} — ${it.scorePeor}% (${it.nivel})`);
-    if (it.problemaPrincipal) lineas.push(`   ${it.problemaPrincipal.label}: ${it.problemaPrincipal.detalle}`);
+    lineas.push(
+      `• ${it.clave} ${it.titulo.slice(0, 45)} — ${it.reclamos} reclamo${it.reclamos === 1 ? "" : "s"}` +
+        (it.ventas180d !== null ? ` / ${it.ventas180d} ventas` : ""),
+    );
+    lineas.push(`   ${it.problemaPrincipalTexto}`);
   }
   if (items.length > max) lineas.push(`… y ${items.length - max} más (ver en la plataforma).`);
   return lineas.join("\n");
 }
 
-/** Etiqueta y color de un puntaje, para la UI. */
-export function experienciaEstado(score: number): { label: string; tone: string; dot: string } {
-  const s = semaforoDe(score);
-  if (score >= EXPERIENCIA_MAX) return { label: "Perfecta", tone: "text-emerald-300", dot: "bg-emerald-400" };
-  if (s === "verde") return { label: "Excelente", tone: "text-emerald-300", dot: "bg-emerald-400" };
-  if (s === "amarillo") return { label: "Buena", tone: "text-amber-300", dot: "bg-amber-400" };
-  if (s === "naranja") return { label: "Regular", tone: "text-orange-300", dot: "bg-orange-400" };
-  return { label: "Mala", tone: "text-red-300", dot: "bg-red-400" };
+/** Etiqueta y color de una fila, para la UI. */
+export function experienciaEstado(sku: ExperienciaSku): { label: string; tone: string; dot: string } {
+  if (sku.situacion === "sin-ventas") {
+    return { label: "Sin ventas", tone: "text-zinc-400", dot: "bg-zinc-500" };
+  }
+  if (sku.situacion === "sin-datos") {
+    return { label: "Sin datos", tone: "text-zinc-400", dot: "bg-zinc-500" };
+  }
+  if (sku.semaforo === "rojo") return { label: "Mala", tone: "text-red-300", dot: "bg-red-400" };
+  if (sku.reclamos > 0) return { label: "Con problemas", tone: "text-amber-300", dot: "bg-amber-400" };
+  return { label: "Sin problemas", tone: "text-emerald-300", dot: "bg-emerald-400" };
 }
-
-/** Peso total del catálogo de aspectos (100). Expuesto para los tests. */
-export const PESO_TOTAL_ASPECTOS = PESO_TOTAL;

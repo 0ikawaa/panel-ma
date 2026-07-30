@@ -35,8 +35,8 @@ const REPORTES = [
   {
     href: "/reportes/experiencia",
     titulo: "Publicaciones con mala experiencia de compra",
-    desc: "Los SKU unificados cuya experiencia de compra en ML no llega al 100%, con semáforo, el problema principal y qué pide MercadoLibre para arreglarlo. Adentro, todos los tipos de problema más las ventas y los reclamos. Cuando una publicación baja de puntaje queda marcada y se avisa por mail.",
-    tag: "En vivo · Mail",
+    desc: "Por SKU: los problemas que tuvieron los compradores en los últimos 180 días, las ventas de ese período, el problema principal y qué pide MercadoLibre para arreglarlo. El dato sale del panel de vendedor (ML no lo da por API), así que se importa una captura; cuando un SKU suma reclamos respecto de la captura anterior, se avisa por mail.",
+    tag: "Captura · Mail",
     activo: true,
   },
   {

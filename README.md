@@ -17,7 +17,7 @@ con base **Postgres (Neon)**. Los datos de ventas y stock se leen en vivo de la 
 | **Dashboard** | Panorama general del negocio. |
 | **Importaciones** | • **Resumen** de importaciones · • **Tablero** kanban de embarques (con adjuntos) · • **Embarques**: subís el Excel de cada contenedor y muestra foto, código, FOB, CBM y totales (extrae las fotos incrustadas en las celdas) · • **Calculadora** de costo nacionalizado · • **Buscar SKU**. |
 | **Ventas** | • **Resumen de Ventas** (ML + Odoo local/mayorista/otros) · • **Rentabilidad por SKU** · • **Órdenes ML** en tiempo real · • **Reposición** (cruza ventas con stock y sugiere cuánto pedir). |
-| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear) · • **Calidad de las publicaciones** (health de ML + objetivos a cumplir) · • **Mala experiencia de compra** (SKU unificados por debajo del 100%, con semáforo, problema principal y cómo mejorarlo según ML; avisa por mail cuando una publicación baja) · • **Publicaciones a revisar** (inactivas con stock en Odoo y su motivo + activas sin ventas en una ventana configurable). |
+| **Reportes** | • **Ventas aceleradas / riesgo de quiebre** (alerta diaria, opcional por WhatsApp) · • **Publicaciones sin rotación** (mes vs mes vs mismo mes del año pasado) · • **Cancelaciones de MercadoLibre** (por semana/mes, con detalle al clickear) · • **Calidad de las publicaciones** (health de ML + objetivos a cumplir) · • **Mala experiencia de compra** (por SKU: los problemas de compradores de los últimos 180 días, las ventas del período, el problema principal y cómo mejorarlo según ML; se alimenta de una captura del panel y avisa por mail lo que empeora) · • **Publicaciones a revisar** (inactivas con stock en Odoo y su motivo + activas sin ventas en una ventana configurable). |
 | **Administración** | Gestión de usuarios y sus módulos, backups. |
 
 El menú (sidebar y nav móvil) muestra a cada usuario solo los módulos que tiene habilitados.
@@ -122,48 +122,71 @@ El `.env` y cualquier base local están en `.gitignore` (no se suben). Ver `.env
 
 ---
 
-## ⏰ Reportes automáticos (cron)
+## ⏰ Reporte automático (cron)
 
-Dos reportes corren y se envían solos todos los días. Está configurado en `vercel.json`:
+**Ventas aceleradas** corre y se envía solo todos los días. Está configurado en `vercel.json`:
 
 ```json
 { "crons": [ { "path": "/api/cron/reportes", "schedule": "0 12 * * *" } ] }
 ```
 
 `12:00 UTC` = **09:00 de Uruguay** (UTC-3). El endpoint valida el header `Authorization: Bearer $CRON_SECRET`,
-así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para que funcione.
+así que hay que cargar `CRON_SECRET` en las variables de entorno de Vercel para que funcione. Si hay SKU
+en riesgo, se manda por WhatsApp.
 
-Lo que hace cada corrida:
+El reporte de **experiencia de compra** no está en el cron, y no es un olvido: su dato solo existe en el
+panel de vendedor. Ver abajo.
 
-- **Ventas aceleradas** → se manda por WhatsApp si hay SKU en riesgo.
-- **Experiencia de compra** → compara el puntaje de cada publicación contra la corrida anterior y, si
-  alguna bajó, manda **un mail** con la lista y deja la publicación **marcada en el panel** hasta que
-  alguien la marque como vista.
+---
 
-Los dos van con `Promise.allSettled`: si uno falla, el otro sale igual.
+## 😞 Experiencia de compra
 
-### Alertas de experiencia de compra
+Es lo que ML mide con los **problemas que tuvieron los compradores** en las ventas de los últimos 180
+días («hiciste 422 ventas y tuviste 17 problemas»), comparado contra productos parecidos de la
+competencia. Cada problema viene tipificado (faltaban partes, llegó dañado, era diferente a lo pedido…)
+con el consejo textual de ML para arreglarlo.
 
-MercadoLibre le pone a cada publicación un puntaje de **experiencia de compra** de 0 a 100 que sale de
-nueve aspectos con distinto peso: ficha técnica/health (25 pts), fotos (15), opiniones (15), envío
-gratis (10), catálogo (10), descripción (10), carrito (5), video (5) e infracciones (5). **No es lo
-mismo que el `health`** del reporte *Calidad de las publicaciones*: el health es uno de los nueve.
+**No confundir con la calidad de la publicación** (ficha, fotos, catálogo, video), que es otra métrica y
+tiene su propio reporte en *Calidad de las publicaciones*.
 
-Detalles de cómo funciona la alerta:
+### Por qué se importa a mano
 
-- **La primera corrida no avisa.** Guarda el puntaje de cada publicación como punto de partida en
-  `ExperienciaScore`. Sin eso, el primer mail serían ~800 publicaciones que ya venían flojas.
-- **Avisa cuando el puntaje baja** respecto de la corrida anterior, con un mínimo de puntos
-  (`minCaida`, por defecto 5) para que no moleste por ±1 punto. Dejar de estar en 100% se avisa
-  siempre, aunque sea de un punto.
-- **La marca se limpia sola** si la publicación recupera el puntaje que tenía; también se puede marcar
-  como vista a mano desde la pantalla.
-- El destino del mail se edita desde la pantalla del reporte (o con `REPORT_EMAIL_TO`).
+El dato **no está en ninguna API**. La doc de MUNDO SHOP lo dice en sus notas: *«Reclamos: No disponible
+por API de ML (permiso no habilitado)»*. Ojo con `/ml-experiencia/:id`: a pesar del nombre **no** es
+esto, es un puntaje casero de 9 aspectos de la ficha (health 25 pts, fotos 15, opiniones 15…) que no
+mira reclamos.
 
-**Reclamos por publicación:** la API de MercadoLibre todavía no los expone (el permiso no está
-habilitado), así que la tabla `ml_claims` de MUNDO SHOP está vacía. La consulta ya está armada: cuando
-se habilite, los reclamos por SKU aparecen solos. Mientras tanto se muestra el total del vendedor
-(`/ml-reputacion`, últimos 120 días) y, por SKU, las **cancelaciones** de sus órdenes.
+Como el panel pide login, un cron de Vercel no puede ir a buscarlo. El flujo es:
+
+1. **Capturar** el panel de vendedor con el navegador. Salen dos JSON: el del **listado** (todas las
+   publicaciones con su `%` de experiencia y de calidad) y el del **diagnóstico** (el detalle de
+   problemas de las que están por debajo de 100).
+2. **Importar** los JSON desde el botón *Importar captura* de la pantalla del reporte
+   (`POST /api/reportes/experiencia/import`, acepta los dos archivos juntos). Se mergean por id de
+   publicación y quedan guardados como snapshot en `ExperienciaSnapshot`.
+3. La pantalla y el Excel leen **la última captura**.
+
+### Cómo se arma el reporte
+
+- **Una fila por SKU completo.** `16214-BLA` y `16214-NOG` van separados: ML calcula la experiencia a
+  nivel producto, así que las publicaciones que comparten SKU traen los mismos reclamos, las mismas
+  ventas y el mismo consejo. Los números se toman **una vez por SKU**, no se suman entre hermanas
+  (verificado en los 60 SKU con más de una publicación). Las publicaciones sin SKU cargado en ML quedan
+  como filas propias.
+- **Semáforo:** 🔴 hasta 30 % (ahí ML avisa que puede pausar o anular), 🟡 por debajo de 100 %.
+- **Ventas 180 d:** las que informa ML. Cuando el panel no las dice (los SKU sin problemas) se usa la
+  columna de nuestra base, calculada sobre `ml_orders` de MUNDO SHOP.
+- **`exp: -1` no es un puntaje malo, es «no lo calculé»**: son las publicaciones que no vendieron en la
+  ventana (683 de 2213 en la captura del 29/07). Quedan afuera del reporte y se informan aparte en el
+  resumen; si entraran, aparecerían como las peores del catálogo.
+
+### El aviso por mail
+
+Sale **al importar una captura nueva**, comparándola con la anterior: avisa los SKU que sumaron
+reclamos (`minReclamos`, por defecto 1) o que perdieron puntos de experiencia. Comparar es la única
+forma de saber qué empeoró, porque ML da los reclamos de la ventana como total y no fechados. La
+**primera captura no manda nada** (no hay con qué comparar). El destino se edita desde la pantalla (o
+con `REPORT_EMAIL_TO`).
 
 ---
 
