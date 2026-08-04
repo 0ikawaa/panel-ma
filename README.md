@@ -195,8 +195,9 @@ con `REPORT_EMAIL_TO`).
 La planilla se mantiene sola: una pestaña **Resumen** con todos los embarques (con su **Origen**: 🇨🇳 China
 o 🇧🇷 Brasil) y una pestaña por embarque con su detalle (foto, código, cantidad y observaciones). Los
 embarques de Brasil llevan **“ - BR”** al final del nombre, porque en la pestaña no hay columna que lo
-aclare. Cuando un embarque se marca como **arribado** (entra a depósito), su pestaña se oculta sola; queda
-accesible desde *Ver > Hojas ocultas*.
+aclare. Cuando un embarque se marca como **arribado** (entra a depósito), **su pestaña se queda donde
+está**, con todo el detalle a mano: el cambio se ve en el Resumen (estado y fecha de llegada) y en el
+encabezado de la pestaña. Lo único que se mueve es el orden: los recibidos bajan al final.
 
 La foto que se manda es la misma que muestra la tabla del panel: **la puesta a mano > la de MercadoLibre
 (por código) > la del Excel**. Las `.webp` no viajan: `=IMAGE()` de Sheets no las renderiza.

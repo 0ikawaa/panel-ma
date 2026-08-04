@@ -88,7 +88,11 @@ export interface EmbarqueSheet {
   estadoLabel: string;
   eta: string | null;
   receivedAt: string | null;
-  /** true cuando ya ingresó a depósito: el script oculta la pestaña. */
+  /**
+   * true cuando ya ingresó a depósito. La pestaña sigue visible; el script lo
+   * usa para el estado del Resumen, los colores y el orden (los recibidos van
+   * al final).
+   */
   arribado: boolean;
   /**
    * Días que faltan para la ETA (negativo = la fecha ya pasó y no llegó,

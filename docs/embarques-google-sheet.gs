@@ -4,8 +4,10 @@
  * Arma una pestaña "Resumen" con todos los embarques y una pestaña por
  * embarque con su detalle: foto, código, cantidad y observaciones. Cuando un
  * embarque se marca como arribado en la plataforma (entra a depósito), su
- * pestaña se oculta automáticamente: no se borra, así queda el histórico
- * disponible desde Ver > Hojas ocultas.
+ * pestaña se queda donde está —el detalle sigue a mano, que es lo que se
+ * consulta al recibir la mercadería— y el cambio se refleja en el Resumen y en
+ * el encabezado de la pestaña. Lo único que se mueve es el orden: los
+ * recibidos bajan al final.
  *
  * La planilla es de sólo lectura en la práctica: cada actualización reescribe
  * las pestañas de embarque, así que no conviene anotar nada dentro de ellas.
@@ -412,9 +414,10 @@ function actualizar() {
   // las pestañas, así que siempre tiene que quedar una visible.
   escribirResumen_(ss, data);
 
-  // Se escribe y se ordena TODO visible, y recién al final se oculta: Sheets no
-  // permite activar una pestaña oculta, y mover una pestaña de lugar exige
-  // activarla antes.
+  // Todas las pestañas de embarques vivos se muestran: mover una de lugar exige
+  // activarla antes, y Sheets no permite activar una pestaña oculta. También
+  // devuelve a la vista lo que una versión anterior del script haya ocultado al
+  // recibirse.
   var vistos = {};
   var hojas = [];
   for (var i = 0; i < data.embarques.length; i++) {
@@ -433,10 +436,10 @@ function actualizar() {
   }
   ss.setActiveSheet(ss.getSheetByName(PESTANA_RESUMEN));
 
-  // Ya arribados: se ocultan. Siguen accesibles desde Ver > Hojas ocultas.
-  for (var m = 0; m < data.embarques.length; m++) {
-    if (data.embarques[m].arribado) hojas[m].hideSheet();
-  }
+  // Recibir un embarque NO le toca la pestaña: se queda visible con todo su
+  // detalle, y el cambio se ve en el Resumen (estado y fecha) y en el
+  // encabezado de la propia pestaña. Los recibidos ya quedaron ordenados al
+  // final por el bloque de arriba.
 
   // Embarques borrados en la plataforma: se ocultan, nunca se borran, para no
   // perder nada que alguien haya anotado al costado.
