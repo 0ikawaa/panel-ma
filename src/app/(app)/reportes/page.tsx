@@ -5,6 +5,13 @@ export const dynamic = "force-dynamic";
 // Índice de la sección Reportes. Por ahora un reporte; pensado para crecer.
 const REPORTES = [
   {
+    href: "/reportes/semanal",
+    titulo: "Reporte semanal de ventas y reposición",
+    desc: "Lo que se vendió la semana que cerró, variante por variante y con foto, cruzado con el stock y lo que viene en camino: cuántos meses cubre cada una y cuántas unidades faltan para llegar al objetivo. Llega solo por mail los lunes a las 9:00, con el Excel adjunto.",
+    tag: "Semanal · Mail",
+    activo: true,
+  },
+  {
     href: "/reportes/ventas-aceleradas",
     titulo: "Ventas aceleradas / riesgo de quiebre",
     desc: "SKUs que se están vendiendo mucho más rápido que su ritmo habitual y cuyo stock (más lo que viene en camino) no alcanza a cubrir la demanda: te avisa antes de quedarte sin producto.",

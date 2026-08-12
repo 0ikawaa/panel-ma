@@ -64,16 +64,35 @@ export function panelBaseUrl(): string | null {
  * Manda un mail a uno o varios destinatarios (un solo envío con todos en `to`).
  * Nunca tira: los problemas vuelven en `status`.
  */
+export type MailAttachment = {
+  filename: string;
+  content: Uint8Array; // se manda en base64, como pide la API de Resend
+};
+
+/** Tope por adjunto. Resend rechaza el mail entero arriba de 40 MB. */
+export const MAX_ADJUNTO_BYTES = 15 * 1024 * 1024;
+
+function base64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
+}
+
 export async function sendMail(opts: {
   to: string[];
   subject: string;
   text: string;
   html?: string;
+  attachments?: MailAttachment[];
 }): Promise<MailResult> {
   const tos = opts.to.filter(Boolean);
   if (tos.length === 0) return { ok: false, skipped: true, status: "skipped:sin-destino", to: null };
   const cfg = config();
   if (!cfg) return { ok: false, skipped: true, status: "skipped:sin-config", to: tos.join(",") };
+
+  // Resend corta los mails que pasan los 40 MB. Un adjunto demasiado grande se
+  // descarta y el mail sale igual: mejor el resumen sin planilla que nada.
+  const adjuntos = (opts.attachments ?? [])
+    .filter((a) => a.content.byteLength <= MAX_ADJUNTO_BYTES)
+    .map((a) => ({ filename: a.filename, content: base64(a.content) }));
 
   try {
     const res = await fetch(RESEND_URL, {
@@ -88,8 +107,10 @@ export async function sendMail(opts: {
         subject: opts.subject,
         text: opts.text,
         ...(opts.html ? { html: opts.html } : {}),
+        ...(adjuntos.length > 0 ? { attachments: adjuntos } : {}),
       }),
-      signal: AbortSignal.timeout(15000),
+      // Un adjunto de varios MB tarda bastante más que un mail de texto.
+      signal: AbortSignal.timeout(adjuntos.length > 0 ? 60000 : 15000),
     });
     const json = (await res.json().catch(() => ({}))) as { id?: string; message?: string; name?: string };
     if (!res.ok) {
