@@ -6,6 +6,56 @@ const KEY = process.env.MUNDOSHOP_API_KEY || "";
 
 type Row = Record<string, unknown>;
 
+/**
+ * Filas de una respuesta de MUNDO SHOP, sea cual sea la forma en que vengan.
+ *
+ * OJO: la API v3 (29/07/2026) devuelve el array de filas PELADO (`[{...}]`),
+ * mientras que la v1/v2 lo envolvía en `{ rows: [...] }`. Leer sólo `.rows`
+ * hacía que todo panel viera cero filas sin ningún error visible — la causa de
+ * que "no anduviera nada". Se aceptan las dos formas (y `data`) para no volver
+ * a romperse si el envoltorio cambia de nuevo.
+ */
+function asRows(json: unknown): Row[] {
+  if (Array.isArray(json)) return json as Row[];
+  if (json && typeof json === "object") {
+    const o = json as { rows?: unknown; data?: unknown };
+    if (Array.isArray(o.rows)) return o.rows as Row[];
+    if (Array.isArray(o.data)) return o.data as Row[];
+  }
+  return [];
+}
+
+/** Mensaje de error de una respuesta fallida, con el cuerpo si lo trae. */
+async function httpError(res: Response, what: string): Promise<Error> {
+  let detalle = "";
+  try {
+    detalle = (await res.text()).trim().slice(0, 200);
+  } catch {
+    /* sin cuerpo */
+  }
+  // Los endpoints /ml-* consultan MercadoLibre en vivo desde el servidor de la
+  // API. Cuando ahí se cae el token de ML, la API contesta 500 (con un 401 de ML
+  // adentro) y no hay nada que arreglar de este lado: hay que avisarle a quien
+  // mantiene MUNDO SHOP. El mensaje lo dice para no perder tiempo buscando acá.
+  const esLive = what.startsWith("/ml-");
+  const pista = esLive
+    ? " — la API no está pudiendo consultar MercadoLibre en vivo (token de ML vencido del lado de MUNDO SHOP)."
+    : "";
+  return new Error(
+    `MUNDO SHOP respondió HTTP ${res.status} en ${what}${detalle ? `: ${detalle}` : ""}${pista}`,
+  );
+}
+
+/** Traduce un fallo de red/timeout de fetch al mensaje que ve el usuario. */
+function networkError(e: unknown, timeoutMs: number, extra = ""): Error {
+  const err = e as Error;
+  if (err.name === "TimeoutError" || err.name === "AbortError") {
+    return new Error(`La API MUNDO SHOP tardó más de ${timeoutMs / 1000}s (timeout).${extra}`);
+  }
+  // ECONNREFUSED / ENOTFOUND / red caída, etc.
+  return new Error(`No hay conexión con la API MUNDO SHOP (${err.message}).`);
+}
+
 /** Ejecuta un SELECT libre contra la API MUNDO SHOP y devuelve las filas. */
 export async function msQuery(sql: string, timeoutMs = 30000): Promise<Row[]> {
   if (!KEY) throw new Error("Falta MUNDOSHOP_API_KEY en el .env");
@@ -17,17 +67,15 @@ export async function msQuery(sql: string, timeoutMs = 30000): Promise<Row[]> {
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
-    const err = e as Error;
-    if (err.name === "TimeoutError" || err.name === "AbortError") {
-      throw new Error(`La API MUNDO SHOP tardó más de ${timeoutMs / 1000}s (timeout). Probá un rango más chico.`);
-    }
-    // ECONNREFUSED / ENOTFOUND / red caída, etc.
-    throw new Error(`No hay conexión con la API MUNDO SHOP (${err.message}).`);
+    throw networkError(e, timeoutMs, " Probá un rango más chico.");
   }
-  if (!res.ok) throw new Error(`MUNDO SHOP respondió HTTP ${res.status}`);
-  const json = (await res.json()) as { rows?: Row[]; error?: string };
-  if (json?.error) throw new Error(String(json.error));
-  return json?.rows ?? [];
+  if (!res.ok) throw await httpError(res, "/query");
+  const json = (await res.json()) as unknown;
+  if (json && !Array.isArray(json) && typeof json === "object") {
+    const err = (json as { error?: unknown }).error;
+    if (err) throw new Error(String(err));
+  }
+  return asRows(json);
 }
 
 /** Fuerza https en las URLs de imágenes de ML (evita el bloqueo de contenido mixto en producción). */
@@ -73,13 +121,17 @@ async function buildPhotoMap(timeoutMs: number): Promise<MlPhotoMaps> {
   const bySku = new Map<string, string>();
   const byBase = new Map<string, string>();
 
-  // Puente item_id→SKU + respaldo de fotos de ml_item_sales (BD, rápido).
+  // Todo desde la BD (rápido y sin depender de que ML live responda): el puente
+  // item_id→SKU, el respaldo de fotos de ml_item_sales y las publicaciones
+  // sincronizadas de ml_items (que ya traen thumbnail para todas las activas).
   let bridgeRows: Row[];
   let salesRows: Row[];
+  let itemRows: Row[];
   try {
-    [bridgeRows, salesRows] = await Promise.all([
+    [bridgeRows, salesRows, itemRows] = await Promise.all([
       msQuery(`SELECT DISTINCT item_id, item_sku FROM ml_order_items WHERE item_sku IS NOT NULL AND item_sku <> ''`, timeoutMs),
       msQuery(`SELECT item_id, MAX(thumbnail) AS thumb FROM ml_item_sales WHERE thumbnail IS NOT NULL AND thumbnail <> '' GROUP BY item_id`, timeoutMs),
+      msQuery(`SELECT id, seller_sku, thumbnail FROM ml_items WHERE thumbnail IS NOT NULL AND thumbnail <> ''`, timeoutMs),
     ]);
   } catch {
     return { bySku, byBase }; // sin puente no hay forma de asociar fotos a SKU
@@ -91,24 +143,39 @@ async function buildPhotoMap(timeoutMs: number): Promise<MlPhotoMaps> {
     const t = httpsUrl(String(r.thumb));
     if (t) thumbByItem.set(String(r.item_id), t);
   }
-  // …y luego las publicaciones live (activas + pausadas), que pisan al respaldo y
-  // cubren casi todo lo que se vende. Si el live falla, se sigue con ml_item_sales.
+  // …y encima las publicaciones sincronizadas (ml_items), que son las vigentes.
+  // `liveIds` marca las que vienen de una publicación viva para preferir su foto
+  // cuando un SKU tiene varias publicaciones.
   const liveIds = new Set<string>();
+  const addLive = (id: string, thumb: string | null | undefined) => {
+    const t = httpsUrl(thumb);
+    if (!t) return;
+    thumbByItem.set(id, t);
+    liveIds.add(id);
+  };
+  for (const r of itemRows) addLive(String(r.id), r.thumbnail as string | null);
+
+  // `ml_items.seller_sku` ata la foto al SKU sin pasar por el puente de ventas,
+  // así que cubre también publicaciones que todavía no vendieron.
+  const skuDirecto = new Map<string, string>();
+  for (const r of itemRows) {
+    const sku = parseSellerSku(r.seller_sku as string | null);
+    const t = httpsUrl(r.thumbnail as string | null);
+    if (sku && t && !skuDirecto.has(sku)) skuDirecto.set(sku, t);
+  }
+
+  // Las publicaciones live de ML, cuando la API las devuelve, son lo más fresco y
+  // suman las pausadas/cerradas que no están en ml_items. Es una mejora opcional:
+  // si el live falla (hoy responde 500), se sigue con lo de la BD.
   try {
     const [act, pau, clo] = await Promise.all([
       msListAllItems("active", { timeoutMs }),
       msListAllItems("paused", { timeoutMs }),
       msListAllItems("closed", { timeoutMs }),
     ]);
-    for (const it of [...act.items, ...pau.items, ...clo.items]) {
-      const t = httpsUrl(it.thumbnail);
-      if (t) {
-        thumbByItem.set(it.id, t);
-        liveIds.add(it.id);
-      }
-    }
+    for (const it of [...act.items, ...pau.items, ...clo.items]) addLive(it.id, it.thumbnail);
   } catch {
-    /* sin live: coberura reducida, no rompe */
+    /* sin live: cobertura reducida, no rompe */
   }
 
   // SKU → foto, prefiriendo la de una publicación live (activa/pausada) por sobre
@@ -123,6 +190,11 @@ async function buildPhotoMap(timeoutMs: number): Promise<MlPhotoMaps> {
       bySku.set(sku, t);
       isLiveSku.set(sku, live);
     }
+  }
+  // El puente sólo cubre SKUs que alguna vez vendieron; para el resto vale el
+  // seller_sku de la publicación.
+  for (const [sku, t] of skuDirecto) {
+    if (!bySku.has(sku)) bySku.set(sku, t);
   }
   for (const [sku, t] of bySku) {
     const b = baseOf(sku);
@@ -148,13 +220,9 @@ export async function msGet<T = unknown>(path: string, timeoutMs = 30000): Promi
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (e) {
-    const err = e as Error;
-    if (err.name === "TimeoutError" || err.name === "AbortError") {
-      throw new Error(`La API MUNDO SHOP tardó más de ${timeoutMs / 1000}s (timeout).`);
-    }
-    throw new Error(`No hay conexión con la API MUNDO SHOP (${err.message}).`);
+    throw networkError(e, timeoutMs);
   }
-  if (!res.ok) throw new Error(`MUNDO SHOP respondió HTTP ${res.status}`);
+  if (!res.ok) throw await httpError(res, `/${path.split("?")[0]}`);
   const json = (await res.json()) as T & { error?: string };
   if (json && typeof json === "object" && "error" in json && json.error) {
     throw new Error(String(json.error));
@@ -487,6 +555,19 @@ export async function msListActiveExperiencia(
 type MlItemsPage = { paging?: { total?: number }; items?: MlItem[] };
 
 /**
+ * Normaliza una página de /ml-items. Igual que en `/query`, la respuesta puede
+ * venir envuelta (`{paging, items}`) o como array pelado; en ese caso no hay
+ * total y se usa el largo de la página.
+ */
+function toItemsPage(json: unknown): { items: MlItem[]; total: number | null } {
+  if (Array.isArray(json)) return { items: json as MlItem[], total: null };
+  const p = (json ?? {}) as MlItemsPage;
+  const items = Array.isArray(p.items) ? p.items : [];
+  const total = typeof p.paging?.total === "number" ? p.paging.total : null;
+  return { items, total };
+}
+
+/**
  * Trae TODAS las publicaciones de un estado (active/paused/closed) paginando el
  * endpoint live /ml-items (máx. 100 por página). La primera página revela el
  * total y el resto se pide en paralelo.
@@ -503,17 +584,17 @@ export async function msListAllItems(
   const OFFSET_CAP = 1000; // límite duro de la API de ML
   const max = Math.min(opts.max ?? 5000, OFFSET_CAP);
   const timeoutMs = opts.timeoutMs ?? 30000;
-  const first = await msGet<MlItemsPage>(`ml-items?status=${status}&limit=100&offset=0`, timeoutMs);
-  const items: MlItem[] = [...(first.items ?? [])];
-  const total = first.paging?.total ?? items.length;
+  const first = toItemsPage(await msGet<unknown>(`ml-items?status=${status}&limit=100&offset=0`, timeoutMs));
+  const items: MlItem[] = [...first.items];
+  const total = first.total ?? items.length;
   const fetchTo = Math.min(total, max);
 
   const offsets: number[] = [];
   for (let o = 100; o < fetchTo; o += 100) offsets.push(o);
   const pages = await Promise.all(
     offsets.map((o) =>
-      msGet<MlItemsPage>(`ml-items?status=${status}&limit=100&offset=${o}`, timeoutMs)
-        .then((p) => p.items ?? [])
+      msGet<unknown>(`ml-items?status=${status}&limit=100&offset=${o}`, timeoutMs)
+        .then((p) => toItemsPage(p).items)
         .catch(() => [] as MlItem[]),
     ),
   );

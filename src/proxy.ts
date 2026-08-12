@@ -14,7 +14,11 @@ const PUBLIC_PATHS = [
   "/api/sheets",
 ];
 
-export async function middleware(req: NextRequest) {
+// Next 16 renombró el convenio `middleware` a `proxy`. Con el archivo viejo la
+// app arrancaba igual pero todo lo que devolvía `NextResponse.next()` (o sea,
+// cualquier ruta permitida: el login y todos los paneles ya logueado) contestaba
+// 404. Por eso hay que exportar `proxy` desde `src/proxy.ts`.
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some(
