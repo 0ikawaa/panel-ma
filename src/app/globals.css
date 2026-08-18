@@ -1,6 +1,11 @@
 @import "tailwindcss";
 
 :root {
+  /* La app es oscura y punto. Sin esto el navegador dibuja en claro todo lo
+     que pinta él: la lista desplegada de los <select>, el calendario de las
+     fechas, el autocompletado y las barras de scroll. */
+  color-scheme: dark;
+
   --background: #08080c;
   --surface: #131319;
   --surface-2: #1a1a23;

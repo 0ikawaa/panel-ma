@@ -43,13 +43,25 @@ export default async function ContainerDetailPage({
 
   // Los otros embarques, para mover ítems tildados de acá para allá sin tener
   // que borrarlos y volver a cargarlos (ver components/MoveProductsBar.tsx).
-  const destinos = canEdit
+  const otros = canEdit
     ? await prisma.container.findMany({
         where: { id: { not: id } },
         orderBy: { createdAt: "desc" },
-        select: { id: true, name: true },
+        select: {
+          id: true,
+          name: true,
+          supplier: true,
+          eta: true,
+          status: true,
+          receivedAt: true,
+        },
       })
     : [];
+  const destinos = otros.map((c) => ({
+    ...c,
+    eta: c.eta ? c.eta.toISOString() : null,
+    receivedAt: c.receivedAt ? c.receivedAt.toISOString() : null,
+  }));
 
   const products = container.products;
   const cbmTotal = products.reduce((a, p) => a + (p.cbmTotal ?? 0), 0);
