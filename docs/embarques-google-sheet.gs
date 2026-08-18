@@ -37,9 +37,9 @@ var GRIS_TEXTO = '#5f6b76';
 var BANDA = '#f7f9fb';
 var BLANCO = '#ffffff';
 
-var URGENTE_BG = '#fde8e6';  var URGENTE_FG = '#a4271c'; // llega en <= 3 días o se pasó
-var PRONTO_BG  = '#fef3d7';  var PRONTO_FG  = '#8a5300'; // llega en <= 14 días
-var LEJOS_BG   = '#e3f4e9';  var LEJOS_FG   = '#1c6b3f'; // más lejos
+var URGENTE_BG = '#fde8e6';  var URGENTE_FG = '#a4271c'; // llega en <= 15 días o se pasó
+var PRONTO_BG  = '#fef3d7';  var PRONTO_FG  = '#8a5300'; // llega entre 16 y 40 días
+var LEJOS_BG   = '#e3f4e9';  var LEJOS_FG   = '#1c6b3f'; // de 41 días en adelante
 var NEUTRO_BG  = '#eef1f4';  var NEUTRO_FG  = GRIS_TEXTO; // sin ETA / recibido
 
 var ALTO_FILA_ITEM = 92;
@@ -150,8 +150,8 @@ function coloresLlegada_(emb) {
   if (emb.arribado) return { bg: NEUTRO_BG, fg: NEUTRO_FG };
   var d = emb.diasParaLlegar;
   if (d === null) return { bg: NEUTRO_BG, fg: NEUTRO_FG };
-  if (d <= 3) return { bg: URGENTE_BG, fg: URGENTE_FG };
-  if (d <= 14) return { bg: PRONTO_BG, fg: PRONTO_FG };
+  if (d <= 15) return { bg: URGENTE_BG, fg: URGENTE_FG };
+  if (d <= 40) return { bg: PRONTO_BG, fg: PRONTO_FG };
   return { bg: LEJOS_BG, fg: LEJOS_FG };
 }
 
