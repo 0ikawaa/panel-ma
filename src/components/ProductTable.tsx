@@ -7,6 +7,7 @@ import { esOptimizable } from "@/lib/fotoOptimizable";
 import { landedCost, cbmPorUnidad, IVA, type Origin } from "@/lib/cost";
 import EditProductButton from "./EditProductButton";
 import DeleteProductButton from "./DeleteProductButton";
+import MoveProductsBar, { type DestinoEmbarque } from "./MoveProductsBar";
 
 /**
  * Encabezado ordenable de la tabla.
@@ -46,6 +47,33 @@ function Header({
         )}
       </span>
     </th>
+  );
+}
+
+/**
+ * Tilde para elegir ítems y moverlos de embarque.
+ *
+ * Vive fuera del componente por el mismo motivo que `Header`, y corta la
+ * propagación del click: la fila entera abre y cierra el detalle.
+ */
+function Tilde({
+  on,
+  onChange,
+  label,
+}: {
+  on: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <input
+      type="checkbox"
+      checked={on}
+      onChange={onChange}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={label}
+      className="h-4 w-4 shrink-0 cursor-pointer accent-teal-500"
+    />
   );
 }
 
@@ -90,14 +118,18 @@ export default function ProductTable({
   freightCost,
   origin,
   canEdit = false,
+  destinos = [],
 }: {
   containerId: string;
   products: ProductRow[];
   freightCost: number | null;
   origin: string;
   canEdit?: boolean;
+  /** Otros embarques a los que se pueden mover los ítems tildados. */
+  destinos?: DestinoEmbarque[];
 }) {
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [sel, setSel] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [sortKey, setSortKey] = useState<SortKey>("rowIndex");
   const [asc, setAsc] = useState(true);
@@ -146,6 +178,28 @@ export default function ProductTable({
     });
   }
 
+  // Mover ítems es lo mismo que editarlos: sólo el superadmin, y sólo si hay
+  // otro embarque a donde mandarlos.
+  const seleccionable = canEdit && destinos.length > 0;
+  const todosTildados = products.length > 0 && sel.size === products.length;
+
+  function toggleSel(id: string) {
+    setSel((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTodos() {
+    setSel(todosTildados ? new Set() : new Set(products.map((p) => p.id)));
+  }
+
+  function limpiarSel() {
+    setSel(new Set());
+  }
+
   return (
     <>
       {/* ---------- Lista (celular) ---------- */}
@@ -170,6 +224,14 @@ export default function ProductTable({
           >
             {asc ? "▲" : "▼"}
           </button>
+          {seleccionable && (
+            <button
+              onClick={toggleTodos}
+              className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-semibold text-zinc-300 transition active:bg-white/10"
+            >
+              {todosTildados ? "Ninguno" : "Elegir todos"}
+            </button>
+          )}
         </div>
 
         {sorted.map((p) => {
@@ -178,12 +240,24 @@ export default function ProductTable({
           const cbmU = cbmPorUnidad(p.cbmUnitario, p.cantidadPorCaja);
           const lc = landedCost(origin as Origin, p.precioChina, cbmU, freightCost);
           return (
-            <div key={p.id} className="card p-3">
+            <div
+              key={p.id}
+              className={`card p-3 ${
+                sel.has(p.id) ? "border-teal-400/40 bg-teal-500/[0.06]" : ""
+              }`}
+            >
               <div
                 className={expandable ? "cursor-pointer" : ""}
                 onClick={() => expandable && toggleRow(p.id)}
               >
                 <div className="flex items-start gap-3">
+                  {seleccionable && (
+                    <Tilde
+                      on={sel.has(p.id)}
+                      onChange={() => toggleSel(p.id)}
+                      label={`Elegir ${p.codigo ?? "ítem"}`}
+                    />
+                  )}
                   {p.photo ? (
                     <button
                       onClick={(e) => {
@@ -291,6 +365,15 @@ export default function ProductTable({
         <table className="w-full min-w-[860px] border-collapse text-sm">
           <thead className="border-b border-white/10 bg-white/[0.03]">
             <tr>
+              {seleccionable && (
+                <th className="w-9 px-3 py-3">
+                  <Tilde
+                    on={todosTildados}
+                    onChange={toggleTodos}
+                    label="Elegir todos los ítems"
+                  />
+                </th>
+              )}
               <th className="w-8 px-2 py-3" />
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-400">
                 Foto
@@ -316,9 +399,20 @@ export default function ProductTable({
               return (
                 <Fragment key={p.id}>
                   <tr
-                    className={`transition ${expandable ? "cursor-pointer hover:bg-white/[0.04]" : "hover:bg-white/[0.02]"}`}
+                    className={`transition ${
+                      sel.has(p.id) ? "bg-teal-500/[0.07]" : ""
+                    } ${expandable ? "cursor-pointer hover:bg-white/[0.04]" : "hover:bg-white/[0.02]"}`}
                     onClick={() => expandable && toggleRow(p.id)}
                   >
+                    {seleccionable && (
+                      <td className="px-3 py-2.5">
+                        <Tilde
+                          on={sel.has(p.id)}
+                          onChange={() => toggleSel(p.id)}
+                          label={`Elegir ${p.codigo ?? "ítem"}`}
+                        />
+                      </td>
+                    )}
                     <td className="px-2 py-2.5 text-center">
                       {expandable && (
                         <svg
@@ -407,6 +501,7 @@ export default function ProductTable({
 
                   {isOpen && expandable && (
                     <tr className="bg-black/20">
+                      {seleccionable && <td />}
                       <td />
                       <td colSpan={7} className="px-4 pb-4 pt-1">
                         <DetallePanel p={p} lc={lc} />
@@ -419,6 +514,7 @@ export default function ProductTable({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-white/10 bg-white/[0.03] font-semibold text-white">
+              {seleccionable && <td className="px-3 py-3" />}
               <td className="px-2 py-3" />
               <td className="px-4 py-3" colSpan={2}>
                 {totals.items} ítems
@@ -432,6 +528,18 @@ export default function ProductTable({
           </tfoot>
         </table>
       </div>
+
+      {/* La barra flotante tapa el final de la tabla: le dejamos aire. */}
+      {sel.size > 0 && <div className="h-24" />}
+
+      {seleccionable && (
+        <MoveProductsBar
+          ids={[...sel]}
+          destinos={destinos}
+          onClear={limpiarSel}
+          onMoved={limpiarSel}
+        />
+      )}
 
       {lightbox && (
         <div

@@ -41,6 +41,16 @@ export default async function ContainerDetailPage({
 
   if (!container) notFound();
 
+  // Los otros embarques, para mover ítems tildados de acá para allá sin tener
+  // que borrarlos y volver a cargarlos (ver components/MoveProductsBar.tsx).
+  const destinos = canEdit
+    ? await prisma.container.findMany({
+        where: { id: { not: id } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true },
+      })
+    : [];
+
   const products = container.products;
   const cbmTotal = products.reduce((a, p) => a + (p.cbmTotal ?? 0), 0);
   const unidades = products.reduce((a, p) => a + (p.unidades ?? 0), 0);
@@ -297,6 +307,7 @@ export default async function ContainerDetailPage({
           freightCost={container.freightCost}
           origin={container.origin}
           canEdit={canEdit}
+          destinos={destinos}
         />
       )}
     </div>
