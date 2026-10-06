@@ -4,6 +4,9 @@ Plataforma interna de **MA Importaciones** para gestionar todo el negocio en un 
 importaciones (contenedores/arribos), ventas (MercadoLibre + Odoo), reposición, rentabilidad
 y una sección de **reportes** analíticos. El acceso se controla **por módulos** según el usuario.
 
+![Resumen de importaciones · montos y proveedores difuminados](./docs/captura.jpg)
+
+
 Construida con **Next.js 16 · React 19 · Prisma · Tailwind · TypeScript**, desplegada en **Vercel**
 con base **Postgres (Neon)**. Los datos de ventas y stock se leen en vivo de la API externa
 **MUNDO SHOP** (espejo de solo lectura de Odoo + MercadoLibre).
